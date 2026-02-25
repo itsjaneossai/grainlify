@@ -288,7 +288,7 @@ impl GovernanceContract {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "governance_contract_tests"))]
 mod test {
     use super::*;
     use soroban_sdk::testutils::{Address as _, Events, Ledger};
@@ -493,5 +493,4 @@ mod test {
         let status = client.finalize_proposal(&proposal_id);
         assert_eq!(status, ProposalStatus::Approved);
     }
-    */
 }

@@ -366,6 +366,8 @@ mod monitoring {
 
 #[cfg(test)]
 mod test_core_monitoring;
+#[cfg(test)]
+mod test_serialization_compatibility;
 // ==================== END MONITORING MODULE ====================
 
 // ============================================================================
@@ -1590,11 +1592,14 @@ mod test {
         assert_eq!(state.from_version, v_before);
         assert_eq!(state.to_version, 3);
     }
-    // Export WASM for testing upgrade/rollback scenarios
-    #[cfg(test)]
+    // Export WASM for testing upgrade/rollback scenarios.
+    //
+    // These tests are optional because the compiled WASM artifact isn't always
+    // available in CI/local `cargo test` flows.
+    #[cfg(all(test, feature = "upgrade_rollback_tests"))]
     pub const WASM: &[u8] = include_bytes!("../target/wasm32v1-none/release/grainlify_core.wasm");
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "upgrade_rollback_tests"))]
     mod upgrade_rollback_tests;
 }
 
