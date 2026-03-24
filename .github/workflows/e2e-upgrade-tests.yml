@@ -12,9 +12,6 @@ on:
       - 'contracts/**'
   workflow_dispatch:
 
-env:
-  STELLAR_CLI_VERSION: "22.5.0"
-
 jobs:
   grainlify-core-e2e-tests:
     name: Grainlify Core E2E Upgrade Tests
@@ -22,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust (with Soroban targets)
         uses: dtolnay/rust-toolchain@stable
@@ -30,7 +27,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -42,28 +39,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-grainlify-core-
 
-      - name: Install Stellar CLI
-        run: |
-          ARCH="$(uname -m)"
-          case "$ARCH" in
-            aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
-            x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
-            *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
-          esac
-          URL="https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-${TARGET}.tar.gz"
-          curl -fL "$URL" -o stellar-cli.tar.gz
-          tar -xzf stellar-cli.tar.gz
-          mkdir -p "$HOME/.local/bin"
-          mv stellar "$HOME/.local/bin/stellar"
-          chmod +x "$HOME/.local/bin/stellar"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/stellar" --version
-
       - name: Build Grainlify Core Contract
         working-directory: contracts/grainlify-core
         run: |
           cargo build --target wasm32-unknown-unknown --release
-          stellar contract optimize --wasm target/wasm32-unknown-unknown/release/grainlify_core.wasm
 
       - name: Run E2E Upgrade Tests
         working-directory: contracts/grainlify-core
@@ -86,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust (with Soroban targets)
         uses: dtolnay/rust-toolchain@stable
@@ -94,7 +73,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -106,28 +85,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-bounty-escrow-
 
-      - name: Install Stellar CLI
-        run: |
-          ARCH="$(uname -m)"
-          case "$ARCH" in
-            aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
-            x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
-            *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
-          esac
-          URL="https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-${TARGET}.tar.gz"
-          curl -fL "$URL" -o stellar-cli.tar.gz
-          tar -xzf stellar-cli.tar.gz
-          mkdir -p "$HOME/.local/bin"
-          mv stellar "$HOME/.local/bin/stellar"
-          chmod +x "$HOME/.local/bin/stellar"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/stellar" --version
-
       - name: Build Bounty Escrow Contract
         working-directory: contracts/bounty_escrow/contracts/escrow
         run: |
           cargo build --target wasm32-unknown-unknown --release
-          stellar contract optimize --wasm ../../target/wasm32-unknown-unknown/release/bounty_escrow.wasm
 
       - name: Run E2E Upgrade with Pause Tests
         working-directory: contracts/bounty_escrow/contracts/escrow
@@ -150,7 +111,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust (with Soroban targets)
         uses: dtolnay/rust-toolchain@stable
@@ -158,7 +119,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -170,28 +131,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-program-escrow-
 
-      - name: Install Stellar CLI
-        run: |
-          ARCH="$(uname -m)"
-          case "$ARCH" in
-            aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
-            x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
-            *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
-          esac
-          URL="https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-${TARGET}.tar.gz"
-          curl -fL "$URL" -o stellar-cli.tar.gz
-          tar -xzf stellar-cli.tar.gz
-          mkdir -p "$HOME/.local/bin"
-          mv stellar "$HOME/.local/bin/stellar"
-          chmod +x "$HOME/.local/bin/stellar"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/stellar" --version
-
       - name: Build Program Escrow Contract
         working-directory: contracts/program-escrow
         run: |
           cargo build --target wasm32-unknown-unknown --release
-          stellar contract optimize --wasm target/wasm32-unknown-unknown/release/program_escrow.wasm
 
       - name: Run Circuit Breaker Tests
         working-directory: contracts/program-escrow
@@ -215,29 +158,12 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust (with Soroban targets)
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-
-      - name: Install Stellar CLI
-        run: |
-          ARCH="$(uname -m)"
-          case "$ARCH" in
-            aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
-            x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
-            *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
-          esac
-          URL="https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-${TARGET}.tar.gz"
-          curl -fL "$URL" -o stellar-cli.tar.gz
-          tar -xzf stellar-cli.tar.gz
-          mkdir -p "$HOME/.local/bin"
-          mv stellar "$HOME/.local/bin/stellar"
-          chmod +x "$HOME/.local/bin/stellar"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/stellar" --version
 
       - name: Run Integration Tests
         working-directory: contracts
