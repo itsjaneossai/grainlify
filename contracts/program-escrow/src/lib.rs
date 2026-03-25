@@ -471,6 +471,7 @@ pub enum DataKey {
     DependencyStatus(String),        // program_id -> DependencyStatus
     SplitConfig(String),             // program_id -> SplitConfig (payout splits)
     Dispute,                         // DisputeRecord (single active dispute per contract)
+    SplitConfig(String),             // program_id -> SplitConfig
 }
 
 #[contracttype]

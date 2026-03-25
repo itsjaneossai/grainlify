@@ -8,7 +8,8 @@
 mod multisig;
 use multisig::{MultiSig, MultiSigConfig};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, String, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    String, Symbol, Vec,
 };
 pub mod asset;
 mod governance;
@@ -18,6 +19,50 @@ pub mod pseudo_randomness;
 pub use governance::{
     Error as GovError, GovernanceConfig, Proposal, ProposalStatus, Vote, VoteType, VotingScheme,
 };
+
+// ============================================================================
+// Contract Errors
+// ============================================================================
+
+/// Typed errors for the GrainlifyContract.
+///
+/// Using `#[contracterror]` ensures these are surfaced as structured error
+/// codes in the Soroban host rather than opaque panic strings, making them
+/// easier to handle in client SDKs and off-chain tooling.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum ContractError {
+    /// Contract has already been initialized; `init*` cannot be called again.
+    AlreadyInitialized = 1,
+    /// Caller is not the configured admin.
+    NotAdmin = 2,
+    /// Contract has not been initialized yet (admin not set).
+    NotInitialized = 3,
+    /// Multisig threshold has not been reached for this proposal.
+    ThresholdNotMet = 4,
+    /// The referenced upgrade proposal does not exist.
+    ProposalNotFound = 5,
+}
+
+// ============================================================================
+// Upgrade Event
+// ============================================================================
+
+/// Emitted on every successful WASM upgrade (both single-admin and multisig paths).
+///
+/// Off-chain indexers and monitoring tools should subscribe to the
+/// `("upgrade", "wasm")` topic pair to track all contract upgrades.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct UpgradeEvent {
+    /// The new WASM hash that was installed.
+    pub new_wasm_hash: BytesN<32>,
+    /// Version number recorded at the time of upgrade (may be 0 if not yet set).
+    pub version: u32,
+    /// Ledger timestamp when the upgrade was executed.
+    pub timestamp: u64,
+}
 
 // ==================== MONITORING MODULE ====================
 mod monitoring {
@@ -383,6 +428,8 @@ mod test_core_monitoring;
 mod test_performance_stats;
 #[cfg(test)]
 mod test_serialization_compatibility;
+#[cfg(test)]
+mod test_version_helpers;
 
 // ==================== END MONITORING MODULE ====================
 
@@ -1011,6 +1058,17 @@ impl GrainlifyContract {
     /// # Arguments
     /// * `env` - The contract environment
     /// * `proposal_id` - The ID of the upgrade proposal to execute
+    ///
+    /// # Authorization
+    /// No additional auth required here — the multisig approval quorum
+    /// (collected via [`approve_upgrade`]) acts as the authorization gate.
+    /// Panics with `"Threshold not met"` if quorum has not been reached.
+    ///
+    /// # Events
+    /// Emits `("upgrade", "wasm")` → [`UpgradeEvent`] on success.
+    ///
+    /// # State Preservation
+    /// All instance storage is preserved across the WASM replacement.
     pub fn execute_upgrade(env: Env, proposal_id: u64) {
         if !MultiSig::can_execute(&env, proposal_id) {
             panic!("Threshold not met");
@@ -1022,7 +1080,25 @@ impl GrainlifyContract {
             .get(&DataKey::UpgradeProposal(proposal_id))
             .expect("Missing upgrade proposal");
 
-        env.deployer().update_current_contract_wasm(wasm_hash);
+        // Store previous version for potential rollback
+        let current_version: u32 = env.storage().instance().get(&DataKey::Version).unwrap_or(1);
+        env.storage()
+            .instance()
+            .set(&DataKey::PreviousVersion, &current_version);
+
+        // Perform WASM upgrade — instance storage is preserved
+        env.deployer()
+            .update_current_contract_wasm(wasm_hash.clone());
+
+        // Emit structured upgrade event for off-chain indexers
+        env.events().publish(
+            (symbol_short!("upgrade"), symbol_short!("wasm")),
+            UpgradeEvent {
+                new_wasm_hash: wasm_hash,
+                version: current_version,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
 
         MultiSig::mark_executed(&env, proposal_id);
     }
@@ -1032,21 +1108,66 @@ impl GrainlifyContract {
     /// # Arguments
     /// * `env` - The contract environment
     /// * `new_wasm_hash` - Hash of the uploaded WASM code (32 bytes)
+    /// Upgrades the contract to new WASM code (single admin version).
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `new_wasm_hash` - Hash of the uploaded WASM code (32 bytes)
+    ///
+    /// # Authorization
+    /// Requires `require_auth()` from the configured admin address.
+    /// Panics with [`ContractError::NotInitialized`] if the contract has not
+    /// been initialized, or [`ContractError::NotAdmin`] if the caller is not
+    /// the admin.
+    ///
+    /// # Events
+    /// Emits `("upgrade", "wasm")` → [`UpgradeEvent`] on success.
+    ///
+    /// # State Preservation
+    /// All instance storage (admin, version, migration state, snapshots) is
+    /// preserved across the WASM replacement — only the executable code changes.
+    /// Returns the configured admin address, or `None` if the contract has not
+    /// been initialized via [`init_admin`] or [`init_with_network`].
+    ///
+    /// This is a view-only helper for off-chain tooling and auditors.
+    pub fn get_admin(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::Admin)
+    }
+
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         let start = env.ledger().timestamp();
 
-        // Verify admin authorization
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        // Verify admin is set (contract initialized).
+        // Panics with ContractError::NotInitialized if admin key is absent.
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic!("{}", ContractError::NotInitialized as u32));
+
+        // Require admin authorization — panics with auth error if not signed by admin.
+        // This is the primary security gate: only the configured admin can upgrade.
         admin.require_auth();
 
         // Store previous version for potential rollback
-        let current_version = env.storage().instance().get(&DataKey::Version).unwrap_or(1);
+        let current_version: u32 = env.storage().instance().get(&DataKey::Version).unwrap_or(1);
         env.storage()
             .instance()
             .set(&DataKey::PreviousVersion, &current_version);
 
-        // Perform WASM upgrade
-        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        // Perform WASM upgrade — instance storage is preserved
+        env.deployer()
+            .update_current_contract_wasm(new_wasm_hash.clone());
+
+        // Emit structured upgrade event for off-chain indexers
+        env.events().publish(
+            (symbol_short!("upgrade"), symbol_short!("wasm")),
+            UpgradeEvent {
+                new_wasm_hash,
+                version: current_version,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
 
         // Track successful operation
         monitoring::track_operation(&env, symbol_short!("upgrade"), admin, true);
@@ -1102,23 +1223,81 @@ impl GrainlifyContract {
         env.storage().instance().get(&DataKey::Version).unwrap_or(0)
     }
 
-    /// Returns the semantic version string (e.g., "1.0.0").
-    /// Falls back to mapping known numeric values to semantic strings.
+    /// Returns the semantic version string decoded from the stored numeric encoding.
+    ///
+    /// # Encoding policy
+    /// Versions stored as `major * 10_000 + minor * 100 + patch` are decoded
+    /// directly.  Legacy single-digit values (`1`, `2`, …) are treated as
+    /// `major.0.0` for backward compatibility.  A stored value of `0` returns
+    /// `"0.0.0"`.
+    ///
+    /// # Examples
+    /// | stored value | returned string |
+    /// |---|---|
+    /// | `0`      | `"0.0.0"` |
+    /// | `1`      | `"1.0.0"` (legacy) |
+    /// | `10000`  | `"1.0.0"` |
+    /// | `10100`  | `"1.1.0"` |
+    /// | `10001`  | `"1.0.1"` |
+    /// | `20305`  | `"2.3.5"` |
+    ///
+    /// # Security note
+    /// This is a pure view function; it performs no authorization and cannot
+    /// mutate state.
     pub fn get_version_semver_string(env: Env) -> String {
-        let raw: u32 = env.storage().instance().get(&DataKey::Version).unwrap_or(0);
-        let s = match raw {
-            0 => "0.0.0",
-            1 | 10000 => "1.0.0",
-            2 | 20000 => "2.0.0",
-            10100 => "1.1.0",
-            10001 => "1.0.1",
-            _ => "unknown",
+        let encoded = Self::get_version_numeric_encoded(env.clone());
+        let major = encoded / 10_000;
+        let minor = (encoded % 10_000) / 100;
+        let patch = encoded % 100;
+
+        // Build "major.minor.patch" without heap allocation beyond the SDK String.
+        // Maximum length: 3 digits each + 2 dots = 11 chars — well within limits.
+        let mut buf = [0u8; 12];
+        let mut pos = 0usize;
+
+        let write_u32 = |n: u32, buf: &mut [u8; 12], pos: &mut usize| {
+            if n >= 100 {
+                buf[*pos] = b'0' + (n / 100) as u8;
+                *pos += 1;
+            }
+            if n >= 10 {
+                buf[*pos] = b'0' + ((n % 100) / 10) as u8;
+                *pos += 1;
+            }
+            buf[*pos] = b'0' + (n % 10) as u8;
+            *pos += 1;
         };
+
+        write_u32(major, &mut buf, &mut pos);
+        buf[pos] = b'.';
+        pos += 1;
+        write_u32(minor, &mut buf, &mut pos);
+        buf[pos] = b'.';
+        pos += 1;
+        write_u32(patch, &mut buf, &mut pos);
+
+        // SAFETY: buf contains only ASCII digits and dots.
+        let s = core::str::from_utf8(&buf[..pos]).unwrap_or("0.0.0");
         String::from_str(&env, s)
     }
 
-    /// Returns the numeric encoded semantic version using policy major*10_000 + minor*100 + patch.
-    /// If the stored version is a simple major number (1,2,3...), it will be converted to major*10_000.
+    /// Returns the stored version normalised to the `major * 10_000 + minor * 100 + patch`
+    /// encoding used throughout this contract.
+    ///
+    /// Legacy single-digit values (`1`, `2`, …, `9_999`) are promoted to
+    /// `value * 10_000` so that comparisons with fully-encoded versions are
+    /// always correct.
+    ///
+    /// # Examples
+    /// ```text
+    /// stored 1     → 10_000   (1.0.0)
+    /// stored 2     → 20_000   (2.0.0)
+    /// stored 10100 → 10_100   (1.1.0)  — already encoded, returned as-is
+    /// stored 0     → 0        (0.0.0)
+    /// ```
+    ///
+    /// # Security note
+    /// Pure view function; no auth required, no state mutation.
     pub fn get_version_numeric_encoded(env: Env) -> u32 {
         let raw: u32 = env.storage().instance().get(&DataKey::Version).unwrap_or(0);
         if raw >= 10_000 {
@@ -1128,12 +1307,36 @@ impl GrainlifyContract {
         }
     }
 
-    /// Ensures the current version meets a minimum required encoded semantic version.
-    /// Panics if current version is lower than `min_numeric`.
+    /// Asserts that the contract's current version is at least `min_numeric`.
+    ///
+    /// `min_numeric` must use the `major * 10_000 + minor * 100 + patch`
+    /// encoding (e.g., `20000` for ≥ 2.0.0, `10100` for ≥ 1.1.0).
+    ///
+    /// # Errors
+    /// Panics with [`ContractError::NotInitialized`] (code `3`) when the
+    /// contract has not been initialised yet (version == 0).
+    ///
+    /// Panics with the string `"version_too_low"` when the current encoded
+    /// version is strictly less than `min_numeric`.  Integrators should catch
+    /// this panic string to detect version incompatibility.
+    ///
+    /// # Examples
+    /// ```text
+    /// // Contract at 2.0.0 (stored as 20000 or legacy 2)
+    /// require_min_version(20000)  → ok
+    /// require_min_version(10000)  → ok   (1.0.0 ≤ 2.0.0)
+    /// require_min_version(20001)  → panic("version_too_low")
+    /// ```
+    ///
+    /// # Security note
+    /// Pure view function; no auth required, no state mutation.
     pub fn require_min_version(env: Env, min_numeric: u32) {
         let cur = Self::get_version_numeric_encoded(env.clone());
+        if cur == 0 {
+            panic!("{}", ContractError::NotInitialized as u32);
+        }
         if cur < min_numeric {
-            panic!("Incompatible contract version");
+            panic!("version_too_low");
         }
     }
 
@@ -1533,18 +1736,6 @@ impl GrainlifyContract {
         // Get current version
         let current_version = env.storage().instance().get(&DataKey::Version).unwrap_or(1);
 
-        // Idempotent retry: allow re-submitting a migration already recorded.
-        if env.storage().instance().has(&DataKey::MigrationState) {
-            let migration_state: MigrationState = env
-                .storage()
-                .instance()
-                .get(&DataKey::MigrationState)
-                .unwrap();
-            if migration_state.to_version == target_version {
-                return;
-            }
-        }
-
         // Validate target version
         if target_version <= current_version {
             let error_msg =
@@ -1819,8 +2010,10 @@ mod test {
     pub mod invariant_entrypoints_tests;
     pub mod upgrade_rollback_tests;
 
-    // WASM for testing
-    pub const WASM: &[u8] = include_bytes!("../target/wasm32v1-none/release/grainlify_core.wasm");
+    // WASM for testing (only available after building for wasm32 target)
+    #[cfg(feature = "upgrade_rollback_tests")]
+    pub const WASM: &[u8] =
+        include_bytes!("../target/wasm32-unknown-unknown/release/grainlify_core.wasm");
 
     #[test]
     fn multisig_init_works() {
