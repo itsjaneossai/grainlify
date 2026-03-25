@@ -54,7 +54,15 @@ impl<'a> Setup<'a> {
         client.init(&admin, &token_id);
         client.set_anti_abuse_admin(&operator);
 
-        Self { env, admin, operator, depositor, random, client, token_id }
+        Self {
+            env,
+            admin,
+            operator,
+            depositor,
+            random,
+            client,
+            token_id,
+        }
     }
 
     /// Mint tokens to an address and lock a bounty. Returns the bounty_id used.
@@ -74,7 +82,10 @@ fn test_rbac_is_admin_true() {
     let s = Setup::new();
     // Verify admin is stored correctly — use the contract's own state check
     // (rbac helpers require contract context; we verify via observable behavior)
-    assert!(s.client.try_set_paused(&Some(true), &None, &None, &None).is_ok());
+    assert!(s
+        .client
+        .try_set_paused(&Some(true), &None, &None, &None)
+        .is_ok());
 }
 
 #[test]
@@ -83,7 +94,9 @@ fn test_rbac_is_admin_false_for_random() {
     let env = Env::default();
     let contract_id = env.register_contract(None, BountyEscrowContract);
     let client = BountyEscrowContractClient::new(&env, &contract_id);
-    assert!(client.try_set_paused(&Some(true), &None, &None, &None).is_err());
+    assert!(client
+        .try_set_paused(&Some(true), &None, &None, &None)
+        .is_err());
 }
 
 #[test]
@@ -214,8 +227,12 @@ fn test_admin_can_set_anti_abuse_admin() {
 #[test]
 fn test_admin_can_set_filter_mode() {
     let s = Setup::new();
-    s.client.set_filter_mode(&ParticipantFilterMode::BlocklistOnly);
-    assert_eq!(s.client.get_filter_mode(), ParticipantFilterMode::BlocklistOnly);
+    s.client
+        .set_filter_mode(&ParticipantFilterMode::BlocklistOnly);
+    assert_eq!(
+        s.client.get_filter_mode(),
+        ParticipantFilterMode::BlocklistOnly
+    );
 }
 
 // ─── Admin-only: update_anti_abuse_config ───────────────────────────────────
@@ -260,7 +277,9 @@ fn test_depositor_can_lock_funds() {
 fn test_depositor_cannot_lock_zero_amount() {
     let s = Setup::new();
     let deadline = s.env.ledger().timestamp() + 3600;
-    let result = s.client.try_lock_funds(&s.depositor, &1u64, &0i128, &deadline);
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor, &1u64, &0i128, &deadline);
     assert!(result.is_err());
 }
 
@@ -268,7 +287,9 @@ fn test_depositor_cannot_lock_zero_amount() {
 fn test_depositor_cannot_lock_negative_amount() {
     let s = Setup::new();
     let deadline = s.env.ledger().timestamp() + 3600;
-    let result = s.client.try_lock_funds(&s.depositor, &1u64, &(-1i128), &deadline);
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor, &1u64, &(-1i128), &deadline);
     assert!(result.is_err());
 }
 
@@ -279,7 +300,9 @@ fn test_participant_cannot_lock_when_paused() {
     let sac = token::StellarAssetClient::new(&s.env, &s.token_id);
     sac.mint(&s.depositor, &1000i128);
     let deadline = s.env.ledger().timestamp() + 3600;
-    let result = s.client.try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
     assert!(result.is_err());
 }
 
@@ -290,7 +313,9 @@ fn test_participant_cannot_lock_when_deprecated() {
     let sac = token::StellarAssetClient::new(&s.env, &s.token_id);
     sac.mint(&s.depositor, &1000i128);
     let deadline = s.env.ledger().timestamp() + 3600;
-    let result = s.client.try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
     assert!(result.is_err());
 }
 
@@ -365,12 +390,7 @@ fn test_participant_cannot_approve_refund() {
     let env = Env::default();
     let contract_id = env.register_contract(None, BountyEscrowContract);
     let client = BountyEscrowContractClient::new(&env, &contract_id);
-    client.approve_refund(
-        &1u64,
-        &100i128,
-        &Address::generate(&env),
-        &RefundMode::Full,
-    );
+    client.approve_refund(&1u64, &100i128, &Address::generate(&env), &RefundMode::Full);
 }
 
 #[test]
@@ -406,25 +426,31 @@ fn test_random_cannot_deprecate_contract() {
 fn test_no_escalation_blocklisted_participant_cannot_lock() {
     let s = Setup::new();
     s.client.set_blocklist_entry(&s.depositor, &true);
-    s.client.set_filter_mode(&ParticipantFilterMode::BlocklistOnly);
+    s.client
+        .set_filter_mode(&ParticipantFilterMode::BlocklistOnly);
 
     let sac = token::StellarAssetClient::new(&s.env, &s.token_id);
     sac.mint(&s.depositor, &1000i128);
     let deadline = s.env.ledger().timestamp() + 3600;
-    let result = s.client.try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_no_escalation_non_allowlisted_cannot_lock_in_allowlist_mode() {
     let s = Setup::new();
-    s.client.set_filter_mode(&ParticipantFilterMode::AllowlistOnly);
+    s.client
+        .set_filter_mode(&ParticipantFilterMode::AllowlistOnly);
     // depositor is NOT on the allowlist
 
     let sac = token::StellarAssetClient::new(&s.env, &s.token_id);
     sac.mint(&s.depositor, &1000i128);
     let deadline = s.env.ledger().timestamp() + 3600;
-    let result = s.client.try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor, &1u64, &1000i128, &deadline);
     assert!(result.is_err());
 }
 
@@ -432,7 +458,8 @@ fn test_no_escalation_non_allowlisted_cannot_lock_in_allowlist_mode() {
 fn test_allowlisted_participant_can_lock_in_allowlist_mode() {
     let s = Setup::new();
     s.client.set_whitelist_entry(&s.depositor, &true);
-    s.client.set_filter_mode(&ParticipantFilterMode::AllowlistOnly);
+    s.client
+        .set_filter_mode(&ParticipantFilterMode::AllowlistOnly);
 
     let sac = token::StellarAssetClient::new(&s.env, &s.token_id);
     sac.mint(&s.depositor, &1000i128);
@@ -449,7 +476,10 @@ fn test_allowlisted_participant_can_lock_in_allowlist_mode() {
 fn test_admin_stored_on_init() {
     let s = Setup::new();
     // Admin can perform admin-only actions; random cannot
-    assert!(s.client.try_set_paused(&Some(true), &None, &None, &None).is_ok());
+    assert!(s
+        .client
+        .try_set_paused(&Some(true), &None, &None, &None)
+        .is_ok());
     assert_ne!(s.client.get_anti_abuse_admin(), Some(s.random.clone()));
 }
 

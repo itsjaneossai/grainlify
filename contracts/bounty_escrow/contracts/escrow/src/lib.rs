@@ -495,7 +495,9 @@ pub mod rbac {
     /// Returns `true` if `addr` is the stored anti-abuse (operator) admin.
     pub fn is_operator(env: &Env, addr: &Address) -> bool {
         use crate::anti_abuse;
-        anti_abuse::get_admin(env).map(|a| &a == addr).unwrap_or(false)
+        anti_abuse::get_admin(env)
+            .map(|a| &a == addr)
+            .unwrap_or(false)
     }
 }
 
@@ -5566,6 +5568,10 @@ mod escrow_status_transition_tests {
 }
 
 #[cfg(test)]
+mod test_batch_failure_mode;
+#[cfg(test)]
+mod test_batch_failure_modes;
+#[cfg(test)]
 mod test_deadline_variants;
 #[cfg(test)]
 mod test_dry_run_simulation;
@@ -5583,7 +5589,3 @@ mod test_serialization_compatibility;
 mod test_status_transitions;
 #[cfg(test)]
 mod test_upgrade_scenarios;
-#[cfg(test)]
-mod test_batch_failure_mode;
-#[cfg(test)]
-mod test_batch_failure_modes;

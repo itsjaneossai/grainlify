@@ -174,11 +174,7 @@ impl<'a> TestCtx<'a> {
     fn assert_no_escrow(&self, id: u64) {
         self.env.as_contract(&self.contract_id, || {
             assert!(
-                !self
-                    .env
-                    .storage()
-                    .persistent()
-                    .has(&DataKey::Escrow(id)),
+                !self.env.storage().persistent().has(&DataKey::Escrow(id)),
                 "bounty {id} should not exist in storage"
             );
         });

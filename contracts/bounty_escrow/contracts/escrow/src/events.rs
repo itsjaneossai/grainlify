@@ -34,9 +34,8 @@
 use crate::CapabilityAction;
 use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env};
 
- 
 // ── Version constant ─────────────────────────────────────────────────────────
- 
+
 /// Canonical event schema version included in **every** event payload.
 ///
 /// Increment this value  and update all emitter functions whenever the
@@ -47,7 +46,7 @@ pub const EVENT_VERSION_V2: u32 = 2;
 // ═══════════════════════════════════════════════════════════════════════════════
 // INITIALIZATION EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_bounty_initialized`] event.
 ///
 /// Emitted **exactly once** when [`BountyEscrowContract::init`] succeeds.
@@ -75,8 +74,8 @@ pub const EVENT_VERSION_V2: u32 = 2;
 #[derive(Clone, Debug)]
 pub struct BountyEscrowInitialized {
     pub version: u32,
-    pub admin: Address,    // address granted admin authority over this contract.
-    pub token: Address,   // Soroban compatible token contract address (SAC or SEP-41).
+    pub admin: Address, // address granted admin authority over this contract.
+    pub token: Address, // Soroban compatible token contract address (SAC or SEP-41).
     pub timestamp: u64,
 }
 
@@ -118,9 +117,9 @@ pub fn emit_bounty_initialized(env: &Env, event: BountyEscrowInitialized) {
 #[derive(Clone, Debug)]
 pub struct FundsLocked {
     pub version: u32,
-    pub bounty_id: u64,  // a unique bounty identifier assigned by the backend
-    pub amount: i128,    //  gross amount deposited 
-    pub depositor: Address,  // address that does the deposit
+    pub bounty_id: u64,     // a unique bounty identifier assigned by the backend
+    pub amount: i128,       //  gross amount deposited
+    pub depositor: Address, // address that does the deposit
     pub deadline: u64,
 }
 
@@ -156,8 +155,8 @@ pub fn emit_funds_locked(env: &Env, event: FundsLocked) {
 pub struct FundsReleased {
     pub version: u32,
     pub bounty_id: u64,
-    pub amount: i128,     // amount transferred to `recipient` 
-    pub recipient: Address,  // the contributor wallet address that received the funds.
+    pub amount: i128,       // amount transferred to `recipient`
+    pub recipient: Address, // the contributor wallet address that received the funds.
     pub timestamp: u64,
 }
 
@@ -193,7 +192,6 @@ pub struct FundsRefunded {
     pub timestamp: u64,
 }
 
-
 /// Emit [`FundsRefunded`].
 pub fn emit_funds_refunded(env: &Env, event: FundsRefunded) {
     let topics = (symbol_short!("f_ref"), event.bounty_id);
@@ -203,7 +201,7 @@ pub fn emit_funds_refunded(env: &Env, event: FundsRefunded) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // FEE EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Discriminator for fee-collection operations.
 ///
 /// Used in [`FeeCollected`] to distinguish lock-time fees from
@@ -234,9 +232,9 @@ pub enum FeeOperationType {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FeeCollected {
-    pub operation_type: FeeOperationType,  // determines if the fee was collected on lock or release.
-    pub amount: i128,  // actual fee amount transferred
-    pub fee_rate: i128,   // fee rate applied in basis points (1 bp = 0.01 %).
+    pub operation_type: FeeOperationType, // determines if the fee was collected on lock or release.
+    pub amount: i128,                     // actual fee amount transferred
+    pub fee_rate: i128,                   // fee rate applied in basis points (1 bp = 0.01 %).
     pub recipient: Address,
     pub timestamp: u64, // Ledger timestamp.
 }
@@ -267,7 +265,7 @@ pub fn emit_fee_collected(env: &Env, event: FeeCollected) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct BatchFundsLocked {
-    pub count: u32,   //  numbers of escrows created in this batch.
+    pub count: u32,         //  numbers of escrows created in this batch.
     pub total_amount: i128, // the sum of all locked amounts in this batch.
     pub timestamp: u64,
 }
@@ -319,7 +317,7 @@ pub fn emit_fee_config_updated(env: &Env, event: FeeConfigUpdated) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FeeRoutingUpdated {
-     /// Bounty this routing config applies to.
+    /// Bounty this routing config applies to.
     pub bounty_id: u64,
     /// Primary treasury recipient.
     pub treasury_recipient: Address,
@@ -391,7 +389,7 @@ pub fn emit_fee_routed(env: &Env, event: FeeRouted) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct BatchFundsReleased {
-    pub count: u32,     
+    pub count: u32,
     pub total_amount: i128,
     pub timestamp: u64,
 }
@@ -405,7 +403,7 @@ pub fn emit_batch_funds_released(env: &Env, event: BatchFundsReleased) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // APPROVAL & CLAIM EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_approval_added`] event.
 ///
 /// Emitted when a multisig signer approves a large-amount release.
@@ -418,9 +416,9 @@ pub fn emit_batch_funds_released(env: &Env, event: BatchFundsReleased) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct ApprovalAdded {
-    pub bounty_id: u64,    // requiring multisig approval.
+    pub bounty_id: u64,       // requiring multisig approval.
     pub contributor: Address, // intended contributor recipient
-    pub approver: Address, // signer who submitted this approval
+    pub approver: Address,    // signer who submitted this approval
     pub timestamp: u64,
 }
 
@@ -430,7 +428,6 @@ pub fn emit_approval_added(env: &Env, event: ApprovalAdded) {
     env.events().publish(topics, event.clone());
 }
 
- 
 /// Payload emitted when a pending claim is created via `authorize_claim`.
 ///
 /// ### Topics
@@ -489,7 +486,7 @@ pub enum CriticalOperationOutcome {
 // ═══════════════════════════════════════════════════════════════════════════════
 // DETERMINISTIC SELECTION EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_deterministic_selection`] event.
 ///
 /// Emitted when a winner is chosen via
@@ -528,7 +525,6 @@ pub struct DeterministicSelectionDerived {
     pub timestamp: u64,
 }
 
- 
 /// Emit [`DeterministicSelectionDerived`]
 pub fn emit_deterministic_selection(env: &Env, event: DeterministicSelectionDerived) {
     let topics = (symbol_short!("prng_sel"), event.bounty_id);
@@ -538,7 +534,7 @@ pub fn emit_deterministic_selection(env: &Env, event: DeterministicSelectionDeri
 // ═══════════════════════════════════════════════════════════════════════════════
 // ANONYMOUS ESCROW EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_funds_locked_anon`] event.
 ///
 /// Emitted by [`BountyEscrowContract::lock_funds_anonymous`].
@@ -574,7 +570,7 @@ pub fn emit_funds_locked_anon(env: &Env, event: FundsLockedAnon) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // OPERATIONAL STATE EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_deprecation_state_changed`] event.
 ///
 /// Emitted when the admin activates or deactivates the contract kill-switch.
@@ -592,8 +588,9 @@ pub fn emit_funds_locked_anon(env: &Env, event: FundsLockedAnon) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeprecationStateChanged {
     pub deprecated: bool,
-    pub migration_target: Option<Address>,    // optional address of the replacement contract for migration.
-    pub admin: Address,  /// admin address that triggered the change.
+    pub migration_target: Option<Address>, // optional address of the replacement contract for migration.
+    pub admin: Address,
+    /// admin address that triggered the change.
     pub timestamp: u64,
 }
 
@@ -657,7 +654,7 @@ pub fn emit_participant_filter_mode_changed(env: &Env, event: ParticipantFilterM
 // ═══════════════════════════════════════════════════════════════════════════════
 // RISK FLAG EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_risk_flags_updated`] event.
 ///
 /// Emitted when an admin sets or clears risk flags on a bounty's metadata.
@@ -695,7 +692,7 @@ pub fn emit_risk_flags_updated(env: &Env, event: RiskFlagsUpdated) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CLAIM TICKET EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_ticket_issued`] event.
 ///
 /// Emitted when the admin issues a single-use claim ticket via
@@ -759,9 +756,12 @@ pub fn emit_ticket_issued(env: &Env, event: TicketIssued) {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TicketClaimed {
-    pub ticket_id: u64,   /// Ticket that was redeemed.
-    pub bounty_id: u64,  /// Bounty the ticket was issued against.
-    pub claimer: Address, /// Address that redeemed the ticket.
+    pub ticket_id: u64,
+    /// Ticket that was redeemed.
+    pub bounty_id: u64,
+    /// Bounty the ticket was issued against.
+    pub claimer: Address,
+    /// Address that redeemed the ticket.
     pub claimed_at: u64,
 }
 
@@ -774,7 +774,7 @@ pub fn emit_ticket_claimed(env: &Env, event: TicketClaimed) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAUSE & EMERGENCY EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Emit a pause-state-changed event for a single operation type.
 ///
 /// This function is called for `lock`, `release`, and `refund` operations
@@ -821,7 +821,7 @@ pub fn emit_emergency_withdraw(env: &Env, event: EmergencyWithdrawEvent) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CAPABILITY EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
- 
+
 /// Payload for the [`emit_capability_issued`] event.
 ///
 /// Emitted when the admin or an authorized party creates a new capability
@@ -929,7 +929,7 @@ pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityRevoked {
     /// Capability that was revoked
-    pub capability_id: u64, 
+    pub capability_id: u64,
     pub owner: Address,
     pub revoked_at: u64,
 }

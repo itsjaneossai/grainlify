@@ -94,7 +94,10 @@ fn test_deterministic_winner_is_stable_for_same_inputs() {
         .client
         .derive_claim_ticket_winner(&42, &candidates, &1000, &expires_at, &seed);
 
-    assert_eq!(w1, w2, "Identical inputs must always select the same winner");
+    assert_eq!(
+        w1, w2,
+        "Identical inputs must always select the same winner"
+    );
 }
 
 // ============================================================================
@@ -143,17 +146,17 @@ fn test_selection_changes_with_ledger_timestamp() {
     let expires_at = 99_999u64;
 
     // Derive winner at the default ledger timestamp.
-    let idx_t0 = s
-        .client
-        .derive_claim_ticket_winner_index(&10, &candidates, &5000, &expires_at, &seed);
+    let idx_t0 =
+        s.client
+            .derive_claim_ticket_winner_index(&10, &candidates, &5000, &expires_at, &seed);
 
     // Advance the ledger timestamp significantly.
     s.env.ledger().with_mut(|li| {
         li.timestamp += 86_400;
     });
-    let idx_t1 = s
-        .client
-        .derive_claim_ticket_winner_index(&10, &candidates, &5000, &expires_at, &seed);
+    let idx_t1 =
+        s.client
+            .derive_claim_ticket_winner_index(&10, &candidates, &5000, &expires_at, &seed);
 
     assert_ne!(
         idx_t0, idx_t1,
@@ -198,12 +201,12 @@ fn test_different_bounty_ids_produce_different_indices() {
     let seed = BytesN::from_array(&s.env, &[0xBBu8; 32]);
     let expires_at = s.env.ledger().timestamp() + 700;
 
-    let idx_a = s
-        .client
-        .derive_claim_ticket_winner_index(&1, &candidates, &1000, &expires_at, &seed);
-    let idx_b = s
-        .client
-        .derive_claim_ticket_winner_index(&2, &candidates, &1000, &expires_at, &seed);
+    let idx_a =
+        s.client
+            .derive_claim_ticket_winner_index(&1, &candidates, &1000, &expires_at, &seed);
+    let idx_b =
+        s.client
+            .derive_claim_ticket_winner_index(&2, &candidates, &1000, &expires_at, &seed);
 
     assert_ne!(
         idx_a, idx_b,
@@ -244,9 +247,9 @@ fn test_winner_index_resolves_to_winner_address() {
     let seed = BytesN::from_array(&s.env, &[0xCCu8; 32]);
     let expires_at = s.env.ledger().timestamp() + 800;
 
-    let idx = s
-        .client
-        .derive_claim_ticket_winner_index(&33, &candidates, &2000, &expires_at, &seed);
+    let idx =
+        s.client
+            .derive_claim_ticket_winner_index(&33, &candidates, &2000, &expires_at, &seed);
     let addr = s
         .client
         .derive_claim_ticket_winner(&33, &candidates, &2000, &expires_at, &seed);
@@ -344,12 +347,12 @@ fn test_different_amounts_produce_different_indices() {
     let seed = BytesN::from_array(&s.env, &[0xDDu8; 32]);
     let expires_at = s.env.ledger().timestamp() + 400;
 
-    let idx_lo = s
-        .client
-        .derive_claim_ticket_winner_index(&5, &candidates, &100, &expires_at, &seed);
-    let idx_hi = s
-        .client
-        .derive_claim_ticket_winner_index(&5, &candidates, &999_999, &expires_at, &seed);
+    let idx_lo =
+        s.client
+            .derive_claim_ticket_winner_index(&5, &candidates, &100, &expires_at, &seed);
+    let idx_hi =
+        s.client
+            .derive_claim_ticket_winner_index(&5, &candidates, &999_999, &expires_at, &seed);
 
     assert_ne!(
         idx_lo, idx_hi,
@@ -370,9 +373,9 @@ fn test_different_expiry_produces_different_indices() {
     let idx_early = s
         .client
         .derive_claim_ticket_winner_index(&8, &candidates, &500, &1_000, &seed);
-    let idx_late = s
-        .client
-        .derive_claim_ticket_winner_index(&8, &candidates, &500, &999_000, &seed);
+    let idx_late =
+        s.client
+            .derive_claim_ticket_winner_index(&8, &candidates, &500, &999_000, &seed);
 
     assert_ne!(
         idx_early, idx_late,
