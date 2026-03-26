@@ -231,10 +231,7 @@ fn serialization_compatibility_public_types_and_events() {
         ),
         ("MultiSigConfig", multisig_config.clone().into_val(&env)),
         ("Commitment", commitment.clone().into_val(&env)),
-        (
-            "NonceKey::Signer",
-            nonce_key_signer.clone().into_val(&env),
-        ),
+        ("NonceKey::Signer", nonce_key_signer.clone().into_val(&env)),
         (
             "NonceKey::SignerWithDomain",
             nonce_key_domain.clone().into_val(&env),

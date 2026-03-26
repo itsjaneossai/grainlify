@@ -122,6 +122,7 @@ pub const VOTES: Symbol = symbol_short!("VOTES");
 pub const GOVERNANCE_CONFIG: Symbol = symbol_short!("GOV_CFG");
 
 /// Governance errors returned by the standalone governance contract.
+use crate::errors;
 #[soroban_sdk::contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -297,13 +298,11 @@ impl GovernanceContract {
             .instance()
             .get(&GOVERNANCE_CONFIG)
             .ok_or(Error::NotInitialized)?;
-        
+
         let voting_power = match config.voting_scheme {
             VotingScheme::OnePersonOneVote => 1i128,
-            VotingScheme::TokenWeighted => {
-                asset::balance(&env, &config.governance_token, &voter)
-                    .map_err(|_| Error::InsufficientBalance)?
-            }
+            VotingScheme::TokenWeighted => asset::balance(&env, &config.governance_token, &voter)
+                .map_err(|_| Error::InsufficientBalance)?,
         };
 
         match vote_type {
@@ -362,16 +361,18 @@ impl GovernanceContract {
         let total_possible_votes = match config.voting_scheme {
             VotingScheme::OnePersonOneVote => 100i128, // Mock: In a real scenario, this would be the number of eligible voters
             VotingScheme::TokenWeighted => {
-                 let _client = asset::token_client(&env, &config.governance_token).map_err(|_| Error::NotInitialized)?;
-                 // Mock total supply if needed, or get actual total supply
-                 // For simplicity, we'll assume total supply is accessible
-                 // In Soroban, you'd call client.total_supply() if implemented or use a known value
-                 1000000i128 
-             }
+                let _client = asset::token_client(&env, &config.governance_token)
+                    .map_err(|_| Error::NotInitialized)?;
+                // Mock total supply if needed, or get actual total supply
+                // For simplicity, we'll assume total supply is accessible
+                // In Soroban, you'd call client.total_supply() if implemented or use a known value
+                1000000i128
+            }
         };
 
         let total_cast = proposal.votes_for + proposal.votes_against + proposal.votes_abstain;
-        let quorum_met = (total_cast * 10000) / total_possible_votes >= config.quorum_percentage as i128;
+        let quorum_met =
+            (total_cast * 10000) / total_possible_votes >= config.quorum_percentage as i128;
 
         if !quorum_met {
             proposal.status = ProposalStatus::Rejected;
@@ -389,7 +390,7 @@ impl GovernanceContract {
             }
         }
 
-        // Refund stake if not rejected? Or only if approved? 
+        // Refund stake if not rejected? Or only if approved?
         // Typically, stakes are refunded unless the proposal is spam/malicious.
         // For this implementation, we refund if finalized (either approved or rejected, but not if it was a malicious slash)
         if proposal.stake_amount > 0 {
@@ -446,16 +447,18 @@ impl GovernanceContract {
                 break;
             }
         }
-        
+
         if !is_dummy {
-            env.deployer().update_current_contract_wasm(proposal.new_wasm_hash.clone());
+            env.deployer()
+                .update_current_contract_wasm(proposal.new_wasm_hash.clone());
         }
 
         proposal.status = ProposalStatus::Executed;
         proposals.set(proposal_id, proposal);
         env.storage().instance().set(&PROPOSALS, &proposals);
 
-        env.events().publish((symbol_short!("gov_exec"),), proposal_id);
+        env.events()
+            .publish((symbol_short!("gov_exec"),), proposal_id);
         Ok(())
     }
 
@@ -474,7 +477,14 @@ mod test {
     use soroban_sdk::testutils::{Address as _, Ledger};
     use soroban_sdk::{token, BytesN};
 
-    fn setup_test(env: &Env) -> (GovernanceContractClient<'_>, Address, Address, token::StellarAssetClient<'_>) {
+    fn setup_test(
+        env: &Env,
+    ) -> (
+        GovernanceContractClient<'_>,
+        Address,
+        Address,
+        token::StellarAssetClient<'_>,
+    ) {
         let contract_id = env.register_contract(None, GovernanceContract);
         let client = GovernanceContractClient::new(env, &contract_id);
         let admin = Address::generate(env);
@@ -488,7 +498,7 @@ mod test {
         let config = GovernanceConfig {
             voting_period: 100,
             execution_delay: 10,
-            quorum_percentage: 1, // 0.01%
+            quorum_percentage: 1,     // 0.01%
             approval_threshold: 5000, // 50%
             min_proposal_stake: 100,
             voting_scheme: VotingScheme::OnePersonOneVote,
@@ -497,7 +507,7 @@ mod test {
 
         env.mock_all_auths();
         client.init_governance(&admin, &config);
-        
+
         // Mint some tokens for the user
         token_admin_client.mint(&user, &1000);
 
@@ -508,13 +518,13 @@ mod test {
     fn test_create_proposal_with_stake() {
         let env = Env::default();
         let (client, _, user, _) = setup_test(&env);
-        
+
         let prop_id = client.create_proposal(
             &user,
             &BytesN::from_array(&env, &[0u8; 32]),
             &symbol_short!("test"),
         );
-        
+
         assert_eq!(prop_id, 0);
     }
 
@@ -554,7 +564,7 @@ mod test {
     fn test_finalize_and_execute() {
         let env = Env::default();
         let (client, _, user, _) = setup_test(&env);
-        
+
         let prop_id = client.create_proposal(
             &user,
             &BytesN::from_array(&env, &[0u8; 32]),
@@ -562,7 +572,7 @@ mod test {
         );
 
         client.cast_vote(&user, &prop_id, &VoteType::For);
-        
+
         env.ledger().with_mut(|li| li.timestamp = 150);
         let status = client.finalize_proposal(&prop_id);
         assert_eq!(status, ProposalStatus::Approved);
@@ -589,7 +599,7 @@ mod test {
     fn test_token_weighted_voting() {
         let env = Env::default();
         let (client, admin, user, token_admin) = setup_test(&env);
-        
+
         // Change to TokenWeighted
         let config = GovernanceConfig {
             voting_period: 100,
@@ -607,14 +617,18 @@ mod test {
         token_admin.mint(&voter1, &1000);
         token_admin.mint(&voter2, &500);
 
-        let prop_id = client.create_proposal(&user, &BytesN::from_array(&env, &[0u8; 32]), &symbol_short!("test"));
-        
+        let prop_id = client.create_proposal(
+            &user,
+            &BytesN::from_array(&env, &[0u8; 32]),
+            &symbol_short!("test"),
+        );
+
         client.cast_vote(&voter1, &prop_id, &VoteType::For);
         client.cast_vote(&voter2, &prop_id, &VoteType::Against);
 
         env.ledger().with_mut(|li| li.timestamp = 150);
         let status = client.finalize_proposal(&prop_id);
-        
+
         // 1000 vs 500 -> 66.6% -> Approved
         assert_eq!(status, ProposalStatus::Approved);
     }
@@ -628,7 +642,7 @@ mod test {
         let config = GovernanceConfig {
             voting_period: 100,
             execution_delay: 10,
-            quorum_percentage: 5000, 
+            quorum_percentage: 5000,
             approval_threshold: 5000,
             min_proposal_stake: 0,
             voting_scheme: VotingScheme::OnePersonOneVote,
@@ -636,14 +650,18 @@ mod test {
         };
         client.init_governance(&admin, &config);
 
-        let prop_id = client.create_proposal(&user, &BytesN::from_array(&env, &[0u8; 32]), &symbol_short!("test"));
-        
+        let prop_id = client.create_proposal(
+            &user,
+            &BytesN::from_array(&env, &[0u8; 32]),
+            &symbol_short!("test"),
+        );
+
         // Only 1 vote out of 100 (mock total possible) -> 1% < 50%
         client.cast_vote(&user, &prop_id, &VoteType::For);
 
         env.ledger().with_mut(|li| li.timestamp = 150);
         let status = client.finalize_proposal(&prop_id);
-        
+
         assert_eq!(status, ProposalStatus::Rejected);
     }
 
@@ -651,15 +669,19 @@ mod test {
     fn test_execution_delay_enforced() {
         let env = Env::default();
         let (client, _, user, _) = setup_test(&env);
-        
-        let prop_id = client.create_proposal(&user, &BytesN::from_array(&env, &[0u8; 32]), &symbol_short!("test"));
+
+        let prop_id = client.create_proposal(
+            &user,
+            &BytesN::from_array(&env, &[0u8; 32]),
+            &symbol_short!("test"),
+        );
         client.cast_vote(&user, &prop_id, &VoteType::For);
-        
+
         env.ledger().with_mut(|li| li.timestamp = 150);
         client.finalize_proposal(&prop_id);
 
         // voting_end (100) + delay (10) = 110. Current is 150, but let's check exact boundary
-        env.ledger().with_mut(|li| li.timestamp = 105); 
+        env.ledger().with_mut(|li| li.timestamp = 105);
         let result = client.try_execute_proposal(&prop_id);
         assert_eq!(result, Err(Ok(Error::ExecutionDelayNotMet)));
     }
@@ -668,12 +690,16 @@ mod test {
     fn test_stake_refund() {
         let env = Env::default();
         let (client, _, user, _token_admin) = setup_test(&env);
-        
+
         let initial_balance = 1000i128;
         let stake = 100i128;
 
-        let prop_id = client.create_proposal(&user, &BytesN::from_array(&env, &[0u8; 32]), &symbol_short!("test"));
-        
+        let prop_id = client.create_proposal(
+            &user,
+            &BytesN::from_array(&env, &[0u8; 32]),
+            &symbol_short!("test"),
+        );
+
         let token_id = client.get_config().governance_token;
         let balance_after_stake = asset::balance(&env, &token_id, &user).unwrap();
         assert_eq!(balance_after_stake, initial_balance - stake);
@@ -686,4 +712,3 @@ mod test {
         assert_eq!(balance_after_refund, initial_balance);
     }
 }
-

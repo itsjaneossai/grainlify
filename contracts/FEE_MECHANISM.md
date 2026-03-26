@@ -43,14 +43,14 @@ For a principal or payout amount `A`:
 
 ### Serialization goldens
 
-`FeeConfig`, `FeeCollected`, and `FeeConfigUpdated` XDR layouts changed when fixed-fee fields were added. Regenerate `serialization_goldens.rs` after pulling these changes:
+`FeeConfig`, `FeeCollected`, and `FeeConfigUpdated` XDR layouts include fixed-fee fields. The serialization compatibility test (`serialization_compatibility_public_types_and_events`) validates these layouts. To regenerate `serialization_goldens.rs` after schema changes:
 
 ```bash
 # From repo root (Unix-style env; adjust for your shell)
 GRAINLIFY_PRINT_SERIALIZATION_GOLDENS=1 cargo test -p bounty-escrow --lib serialization_compatibility_public_types_and_events -- --nocapture
 ```
 
-Then follow the comment in `test_serialization_compatibility.rs` to refresh `serialization_goldens.rs`.
+Copy the printed `EXPECTED` block into `serialization_goldens.rs`. See the module-level documentation in that file for schema versioning guidelines.
 
 ---
 

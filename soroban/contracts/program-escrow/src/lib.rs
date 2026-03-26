@@ -1176,3 +1176,5 @@ impl ProgramEscrowContract {
 mod test;
 #[cfg(test)]
 mod test_search;
+#[cfg(test)]
+mod test_full_lifecycle;

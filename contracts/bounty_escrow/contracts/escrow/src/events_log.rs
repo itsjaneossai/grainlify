@@ -135,6 +135,8 @@ pub struct FeeCollected {
     pub operation_type: FeeOperationType,
     pub amount: i128,
     pub fee_rate: i128,
+    /// Fixed fee component (token smallest units) applied in addition to percentage.
+    pub fee_fixed: i128,
     pub recipient: Address,
     pub timestamp: u64,
 }

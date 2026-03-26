@@ -43,7 +43,7 @@
 //!
 //! ### 1. Seed Grinding Attacks
 //! **Attack**: Attacker tries many external seeds off-chain to get desired outcome
-//! **Mitigation**: 
+//! **Mitigation**:
 //! - Use unpredictable external seeds (commit-reveal schemes)
 //! - Include time-delayed reveals
 //! - Add multiple independent entropy sources

@@ -286,7 +286,7 @@ fn test_freeze_address_does_not_affect_different_depositor() {
     let deadline = t.env.ledger().timestamp() + 10_000;
     t.client.lock_funds(&t.depositor, &1, &1000, &deadline);
     t.client.lock_funds(&other, &2, &500, &deadline);
-    t.client.freeze_address(&t.depositor, &None);
+    t.client.freeze_address(&t.depositor);
     // other depositor's escrow unaffected
     t.client.release_funds(&2, &t.contributor);
     let info = t.client.get_escrow_info(&2);

@@ -456,7 +456,10 @@ mod cross_contract_interface_tests {
             },
         ];
 
-        let count = client.batch_release_funds(&release_items);
+        let count = env.as_contract(&contract_id, || {
+            <BountyEscrowContract as EscrowInterface>::batch_release_funds(&env, release_items)
+                .unwrap()
+        });
         assert_eq!(count, 2);
 
         for i in 200..202 {
@@ -538,21 +541,21 @@ mod cross_contract_interface_tests {
         let (token, _) = create_token_contract(&env, &token_admin);
         client.init(&admin, &token.address);
 
-        assert_eq!(client.get_version(), 1);
+        assert_eq!(client.get_version(), 2);
         let initial_version = env.as_contract(&contract_id, || {
             <BountyEscrowContract as UpgradeInterface>::get_version(&env)
         });
-        assert_eq!(initial_version, 1);
+        assert_eq!(initial_version, 2);
 
         env.as_contract(&contract_id, || {
-            <BountyEscrowContract as UpgradeInterface>::set_version(&env, 2).unwrap();
+            <BountyEscrowContract as UpgradeInterface>::set_version(&env, 3).unwrap();
         });
 
-        assert_eq!(client.get_version(), 2);
+        assert_eq!(client.get_version(), 3);
         let updated_version = env.as_contract(&contract_id, || {
             <BountyEscrowContract as UpgradeInterface>::get_version(&env)
         });
-        assert_eq!(updated_version, 2);
+        assert_eq!(updated_version, 3);
     }
 
     #[test]

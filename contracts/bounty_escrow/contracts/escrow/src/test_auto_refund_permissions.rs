@@ -59,6 +59,32 @@ impl<'a> TestSetup<'a> {
 }
 
 #[test]
+fn test_auto_refund_anyone_can_trigger_after_deadline() {
+    let setup = TestSetup::new();
+    let bounty_id = 1;
+    let amount = 1000;
+    let deadline = setup.env.ledger().timestamp() + 1000;
+
+    setup
+        .escrow
+        .lock_funds(&setup.depositor, &bounty_id, &amount, &deadline);
+
+    setup.env.ledger().set_timestamp(deadline + 1);
+
+    let initial_balance = setup.token.balance(&setup.depositor);
+
+    // Random user triggers refund
+    setup.escrow.refund(&bounty_id);
+
+    let escrow = setup.escrow.get_escrow_info(&bounty_id);
+    assert_eq!(escrow.status, EscrowStatus::Refunded);
+    assert_eq!(
+        setup.token.balance(&setup.depositor),
+        initial_balance + amount
+    );
+}
+
+#[test]
 fn test_auto_refund_admin_can_trigger_after_deadline() {
     let setup = TestSetup::new();
     let bounty_id = 1;

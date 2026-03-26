@@ -38,7 +38,7 @@
 //! 2. Add a row to the table above.
 //! 3. Register the contract address in the view-facade via `ViewFacade::register`.
 
-use soroban_sdk::{symbol_short, Address, Env, String, Symbol, Vec};
+use soroban_sdk::{symbol_short, Address, Env, Symbol, Vec};
 
 // ============================================================================
 // EscrowInterface

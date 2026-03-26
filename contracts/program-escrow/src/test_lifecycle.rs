@@ -267,6 +267,80 @@ fn test_active_single_payout_allowed() {
     assert_eq!(token_client.balance(&recipient), 40_000);
 }
 
+#[test]
+fn test_delegate_with_release_permission_can_single_payout_by() {
+    let env = Env::default();
+    let (client, admin, _contract_id, token_client) = setup_active_program(&env, 5_000);
+    let delegate = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let program_id = String::from_str(&env, "hack-2026");
+
+    client.set_program_delegate(
+        &program_id,
+        &admin,
+        &delegate,
+        &DELEGATE_PERMISSION_RELEASE,
+    );
+
+    let updated = client.single_payout_by(&delegate, &recipient, &1_250);
+    assert_eq!(updated.remaining_balance, 3_750);
+    assert_eq!(token_client.balance(&recipient), 1_250);
+}
+
+#[test]
+fn test_metadata_only_delegate_cannot_execute_release() {
+    let env = Env::default();
+    let (client, admin, _contract_id, _token_client) = setup_active_program(&env, 5_000);
+    let delegate = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let program_id = String::from_str(&env, "hack-2026");
+
+    client.set_program_delegate(
+        &program_id,
+        &admin,
+        &delegate,
+        &DELEGATE_PERMISSION_UPDATE_META,
+    );
+
+    let metadata = ProgramMetadata {
+        program_name: Some(String::from_str(&env, "Launchpad 2026")),
+        program_type: Some(String::from_str(&env, "accelerator")),
+        ecosystem: Some(String::from_str(&env, "stellar")),
+        tags: vec![&env, String::from_str(&env, "delegate")],
+        start_date: Some(1),
+        end_date: Some(2),
+        custom_fields: vec![&env, (String::from_str(&env, "track"), String::from_str(&env, "infra"))],
+    };
+
+    let updated = client.update_program_metadata(&program_id, &delegate, &metadata);
+    assert_eq!(updated.metadata, Some(metadata));
+
+    assert!(client
+        .try_single_payout_by(&delegate, &recipient, &100)
+        .is_err());
+}
+
+#[test]
+fn test_revoked_delegate_cannot_release_program_funds() {
+    let env = Env::default();
+    let (client, admin, _contract_id, _token_client) = setup_active_program(&env, 5_000);
+    let delegate = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let program_id = String::from_str(&env, "hack-2026");
+
+    client.set_program_delegate(
+        &program_id,
+        &admin,
+        &delegate,
+        &DELEGATE_PERMISSION_RELEASE,
+    );
+    client.revoke_program_delegate(&program_id, &admin);
+
+    assert!(client
+        .try_single_payout_by(&delegate, &recipient, &100)
+        .is_err());
+}
+
 /// In Active state, batch_payout succeeds and reduces remaining balance.
 #[test]
 fn test_active_batch_payout_allowed() {

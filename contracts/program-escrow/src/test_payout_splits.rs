@@ -751,13 +751,16 @@ mod security {
                 },
             ];
             set_split_config(&setup.env, &setup.program_id, bens);
-            });
+        });
 
-            setup.env.as_contract(&setup.contract_id, || {
+        setup.env.as_contract(&setup.contract_id, || {
             let result = execute_split_payout(&setup.env, &setup.program_id, huge);
 
             assert_eq!(result.total_distributed, huge);
-            assert_eq!(setup.get_balance(&setup.r1) + setup.get_balance(&setup.r2), huge);
+            assert_eq!(
+                setup.get_balance(&setup.r1) + setup.get_balance(&setup.r2),
+                huge
+            );
             assert_eq!(result.remaining_balance, 0);
         });
     }

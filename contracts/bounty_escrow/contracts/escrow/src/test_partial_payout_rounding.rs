@@ -861,9 +861,7 @@ fn test_alternating_dust_and_large_payouts() {
     let amount = 1_000_000_i128;
     s.lock(31, amount);
 
-    let payouts = [
-        1_i128, 100_000, 1, 200_000, 1, 300_000, 1, 399_996,
-    ]; // sum = 1_000_000
+    let payouts = [1_i128, 100_000, 1, 200_000, 1, 300_000, 1, 399_996]; // sum = 1_000_000
     let mut total = 0_i128;
 
     for payout in payouts {

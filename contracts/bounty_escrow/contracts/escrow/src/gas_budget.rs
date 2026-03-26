@@ -186,8 +186,7 @@ pub fn check(
         .memory_bytes_cost()
         .saturating_sub(snapshot.mem);
 
-    let cpu_exceeded =
-        budget.max_cpu_instructions > 0 && cpu_used > budget.max_cpu_instructions;
+    let cpu_exceeded = budget.max_cpu_instructions > 0 && cpu_used > budget.max_cpu_instructions;
     let mem_exceeded = budget.max_memory_bytes > 0 && mem_used > budget.max_memory_bytes;
 
     if cpu_exceeded || mem_exceeded {

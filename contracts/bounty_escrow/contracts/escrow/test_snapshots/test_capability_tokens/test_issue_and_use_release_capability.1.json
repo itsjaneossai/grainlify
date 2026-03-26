@@ -174,7 +174,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                 },
                 {
-                  "u64": 1
+                  "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                 }
               ]
             }
@@ -432,7 +432,7 @@
                   "symbol": "Capability"
                 },
                 {
-                  "u64": 1
+                  "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                 }
               ]
             },
@@ -452,7 +452,7 @@
                       "symbol": "Capability"
                     },
                     {
-                      "u64": 1
+                      "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                     }
                   ]
                 },
@@ -646,6 +646,20 @@
                           "lo": 1000
                         }
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {
@@ -863,18 +877,6 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "CapabilityNonce"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "u64": 1
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
                               "symbol": "Token"
                             }
                           ]
@@ -892,7 +894,7 @@
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 2
                         }
                       }
                     ]
@@ -2173,7 +2175,7 @@
                 "symbol": "cap_new"
               },
               {
-                "u64": 1
+                "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
               }
             ],
             "data": {
@@ -2214,7 +2216,7 @@
                     "symbol": "capability_id"
                   },
                   "val": {
-                    "u64": 1
+                    "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                   }
                 },
                 {
@@ -2280,7 +2282,7 @@
               }
             ],
             "data": {
-              "u64": 1
+              "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
             }
           }
         }
@@ -2306,7 +2308,7 @@
               }
             ],
             "data": {
-              "u64": 1
+              "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
             }
           }
         }
@@ -2455,7 +2457,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                 },
                 {
-                  "u64": 1
+                  "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                 }
               ]
             }
@@ -2476,7 +2478,7 @@
                 "symbol": "cap_use"
               },
               {
-                "u64": 1
+                "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
               }
             ],
             "data": {
@@ -2517,7 +2519,7 @@
                     "symbol": "capability_id"
                   },
                   "val": {
-                    "u64": 1
+                    "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                   }
                 },
                 {
@@ -2798,6 +2800,20 @@
                 },
                 {
                   "key": {
+                    "symbol": "archived"
+                  },
+                  "val": {
+                    "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "archived_at"
+                  },
+                  "val": "void"
+                },
+                {
+                  "key": {
                     "symbol": "deadline"
                   },
                   "val": {
@@ -2921,7 +2937,7 @@
               }
             ],
             "data": {
-              "u64": 1
+              "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
             }
           }
         }
@@ -3070,7 +3086,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                 },
                 {
-                  "u64": 1
+                  "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                 }
               ]
             }
@@ -3172,7 +3188,7 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                     },
                     {
-                      "u64": 1
+                      "bytes": "5e07719c9be24e521d9e260e311fe7d205e521004a43a9777c58fc649b8e587c"
                     }
                   ]
                 }

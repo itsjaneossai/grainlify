@@ -3,37 +3,55 @@
 //! Parity with main contracts/bounty_escrow where applicable; see soroban/PARITY.md.
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, token, Address, BytesN, Env, String,
+    contract, contracterror, contractimpl, contracttype, token, Address, BytesN, Env, String, Vec,
 };
+
+const ESCROW_DELEGATE_SET: soroban_sdk::Symbol = symbol_short!("EscDlgS");
+const ESCROW_DELEGATE_REVOKED: soroban_sdk::Symbol = symbol_short!("EscDlgR");
+const ESCROW_METADATA_UPDATED: soroban_sdk::Symbol = symbol_short!("EscMeta");
+const LABEL_CONFIG_UPDATED: soroban_sdk::Symbol = symbol_short!("LblCfg");
+const ESCROW_LABELS_UPDATED: soroban_sdk::Symbol = symbol_short!("EscLbls");
+
+const MAX_LABEL_LENGTH: u32 = 32;
+const MAX_LABELS: u32 = 10;
+const MAX_PAGE_SIZE: u32 = 50;
+
+pub const DELEGATE_PERMISSION_RELEASE: u32 = 1 << 0;
+pub const DELEGATE_PERMISSION_REFUND: u32 = 1 << 1;
+pub const DELEGATE_PERMISSION_UPDATE_META: u32 = 1 << 2;
+pub const DELEGATE_PERMISSION_MASK: u32 = DELEGATE_PERMISSION_RELEASE
+    | DELEGATE_PERMISSION_REFUND
+    | DELEGATE_PERMISSION_UPDATE_META;
 
 mod identity;
 pub use identity::*;
 
 mod reentrancy_guard;
 
+use grainlify_core::errors;
 #[contracterror]
 #[derive(Clone, Debug, PartialEq)]
 #[repr(u32)]
 pub enum Error {
-    NotInitialized = 1,
-    AlreadyInitialized = 2,
-    BountyExists = 3,
-    BountyNotFound = 4,
-    FundsNotLocked = 5,
+    NotInitialized = 2,
+    AlreadyInitialized = 1,
+    BountyExists = 201,
+    BountyNotFound = 202,
+    FundsNotLocked = 203,
     DeadlineNotPassed = 6,
-    Unauthorized = 7,
-    InsufficientBalance = 8,
-    InvalidLabel = 9,
-    TooManyLabels = 10,
-    LabelNotAllowed = 11,
+    Unauthorized = 3,
+    InsufficientFunds = 5,
+    InvalidLabel = 226,
+    TooManyLabels = 227,
+    LabelNotAllowed = 228,
     // Identity-related errors
-    InvalidSignature = 100,
-    ClaimExpired = 101,
-    UnauthorizedIssuer = 102,
-    InvalidClaimFormat = 103,
-    TransactionExceedsLimit = 104,
-    InvalidRiskScore = 105,
-    InvalidTier = 106,
+    InvalidSignature = 301,
+    ClaimExpired = 302,
+    UnauthorizedIssuer = 303,
+    InvalidClaimFormat = 304,
+    TransactionExceedsLimit = 305,
+    InvalidRiskScore = 306,
+    InvalidTier = 307,
 }
 
 #[contracttype]
@@ -53,6 +71,7 @@ pub struct Escrow {
     pub status: EscrowStatus,
     pub deadline: u64,
     pub jurisdiction: OptionalJurisdiction,
+    pub labels: Vec<String>,
 }
 
 #[contracttype]
@@ -69,9 +88,35 @@ pub struct EscrowJurisdictionConfig {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowDelegateSetEvent {
+    pub bounty_id: u64,
+    pub delegate: Address,
+    pub permissions: u32,
+    pub updated_by: Address,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OptionalJurisdiction {
     None,
     Some(EscrowJurisdictionConfig),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowDelegateRevokedEvent {
+    pub bounty_id: u64,
+    pub revoked_by: Address,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowMetadataUpdatedEvent {
+    pub bounty_id: u64,
+    pub updated_by: Address,
+    pub timestamp: u64,
 }
 
 #[contracttype]
@@ -437,6 +482,57 @@ impl EscrowContract {
         Ok(())
     }
 
+    fn validate_delegate_permissions(permissions: u32) -> Result<(), Error> {
+        if permissions == 0 || permissions & !DELEGATE_PERMISSION_MASK != 0 {
+            return Err(Error::InvalidDelegatePermissions);
+        }
+        Ok(())
+    }
+
+    fn is_admin(env: &Env, caller: &Address) -> Result<bool, Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        Ok(admin == *caller)
+    }
+
+    fn require_escrow_owner_or_admin(
+        env: &Env,
+        escrow: &Escrow,
+        caller: &Address,
+    ) -> Result<(), Error> {
+        caller.require_auth();
+        if *caller == escrow.depositor || Self::is_admin(env, caller)? {
+            return Ok(());
+        }
+        Err(Error::Unauthorized)
+    }
+
+    fn require_escrow_actor(
+        env: &Env,
+        escrow: &Escrow,
+        caller: &Address,
+        required_permission: u32,
+    ) -> Result<(), Error> {
+        caller.require_auth();
+        if *caller == escrow.depositor || Self::is_admin(env, caller)? {
+            return Ok(());
+        }
+
+        let delegate_matches = escrow
+            .delegate
+            .as_ref()
+            .map(|delegate| delegate == caller)
+            .unwrap_or(false);
+        if delegate_matches && (escrow.delegate_permissions & required_permission) == required_permission {
+            return Ok(());
+        }
+
+        Err(Error::Unauthorized)
+    }
+
     /// Lock funds: depositor must be authorized; tokens transferred from depositor to contract.
     ///
     /// # Reentrancy
@@ -473,37 +569,49 @@ impl EscrowContract {
 
         depositor.require_auth();
         if !env.storage().instance().has(&DataKey::Admin) {
+            reentrancy_guard::release(&env);
             return Err(Error::NotInitialized);
         }
         if amount <= 0 {
-            return Err(Error::InsufficientBalance);
+            return Err(Error::InsufficientFunds);
         }
         if env.storage().persistent().has(&DataKey::Escrow(bounty_id)) {
+            reentrancy_guard::release(&env);
             return Err(Error::BountyExists);
         }
 
         // Enforcement rules from JURISDICTION_SEGMENTATION.md
         if let OptionalJurisdiction::Some(config) = &jurisdiction {
             if config.lock_paused {
-                return Err(Error::Unauthorized); // Should be a better error, but matching tests
+                reentrancy_guard::release(&env);
+                return Err(Error::Unauthorized);
             }
             if let Some(max_amount) = config.max_lock_amount {
                 if amount > max_amount {
+                    reentrancy_guard::release(&env);
                     return Err(Error::TransactionExceedsLimit);
                 }
             }
             if config.requires_kyc && !Self::is_claim_valid(env.clone(), depositor.clone()) {
+                reentrancy_guard::release(&env);
                 return Err(Error::Unauthorized);
             }
             if config.enforce_identity_limits {
-                Self::enforce_transaction_limit(&env, &depositor, amount)?;
+                if let Err(e) = Self::enforce_transaction_limit(&env, &depositor, amount) {
+                    reentrancy_guard::release(&env);
+                    return Err(e);
+                }
             }
         } else {
             // Generic behavior: always enforce identity limits
-            Self::enforce_transaction_limit(&env, &depositor, amount)?;
+            if let Err(e) = Self::enforce_transaction_limit(&env, &depositor, amount) {
+                reentrancy_guard::release(&env);
+                return Err(e);
+            }
         }
 
         // EFFECTS: write escrow state before external call
+        let labels = Vec::new(&env);
         let escrow = Escrow {
             depositor: depositor.clone(),
             amount,
@@ -511,6 +619,7 @@ impl EscrowContract {
             status: EscrowStatus::Locked,
             deadline,
             jurisdiction: jurisdiction.clone(),
+            labels: Vec::new(&env),
         };
         env.storage()
             .persistent()
@@ -548,17 +657,6 @@ impl EscrowContract {
         let token_client = token::Client::new(&env, &token);
         token_client.transfer(&depositor, &contract, &amount);
 
-        env.events().publish(
-            (ESCROW_LABELS_UPDATED, bounty_id),
-            EscrowLabelsUpdatedEvent {
-                version: 1,
-                bounty_id,
-                actor: depositor,
-                labels,
-                timestamp: env.ledger().timestamp(),
-            },
-        );
-
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
         Ok(())
@@ -579,11 +677,23 @@ impl EscrowContract {
     /// Protected by reentrancy guard. Escrow state is updated to
     /// `Released` *before* the outbound token transfer (CEI pattern).
     pub fn release_funds(env: Env, bounty_id: u64, contributor: Address) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        Self::release_funds_by(env, admin, bounty_id, contributor)
+    }
+
+    pub fn release_funds_by(
+        env: Env,
+        caller: Address,
+        bounty_id: u64,
+        contributor: Address,
+    ) -> Result<(), Error> {
         // GUARD: acquire reentrancy lock
         reentrancy_guard::acquire(&env);
 
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        admin.require_auth();
         if !env.storage().persistent().has(&DataKey::Escrow(bounty_id)) {
             return Err(Error::BountyNotFound);
         }
@@ -593,11 +703,12 @@ impl EscrowContract {
             .persistent()
             .get(&DataKey::Escrow(bounty_id))
             .unwrap();
+        Self::require_escrow_actor(&env, &escrow, &caller, DELEGATE_PERMISSION_RELEASE)?;
         if escrow.status != EscrowStatus::Locked {
             return Err(Error::FundsNotLocked);
         }
         if escrow.remaining_amount <= 0 {
-            return Err(Error::InsufficientBalance);
+            return Err(Error::InsufficientFunds);
         }
 
         // Enforce transaction limit for contributor
@@ -632,6 +743,15 @@ impl EscrowContract {
     /// Protected by reentrancy guard. Escrow state is updated to
     /// `Refunded` *before* the outbound token transfer (CEI pattern).
     pub fn refund(env: Env, bounty_id: u64) -> Result<(), Error> {
+        let escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        Self::refund_by(env, escrow.depositor, bounty_id)
+    }
+
+    pub fn refund_by(env: Env, caller: Address, bounty_id: u64) -> Result<(), Error> {
         // GUARD: acquire reentrancy lock
         reentrancy_guard::acquire(&env);
 
@@ -644,6 +764,7 @@ impl EscrowContract {
             .persistent()
             .get(&DataKey::Escrow(bounty_id))
             .unwrap();
+        Self::require_escrow_actor(&env, &escrow, &caller, DELEGATE_PERMISSION_REFUND)?;
         if escrow.status != EscrowStatus::Locked {
             return Err(Error::FundsNotLocked);
         }
@@ -652,7 +773,7 @@ impl EscrowContract {
             return Err(Error::DeadlineNotPassed);
         }
         if escrow.remaining_amount <= 0 {
-            return Err(Error::InsufficientBalance);
+            return Err(Error::InsufficientFunds);
         }
 
         // EFFECTS: update state before external call (CEI)
@@ -676,6 +797,101 @@ impl EscrowContract {
 
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
+        Ok(())
+    }
+
+    pub fn set_delegate(
+        env: Env,
+        caller: Address,
+        bounty_id: u64,
+        delegate: Address,
+        permissions: u32,
+    ) -> Result<(), Error> {
+        Self::validate_delegate_permissions(permissions)?;
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        Self::require_escrow_owner_or_admin(&env, &escrow, &caller)?;
+
+        if delegate == escrow.depositor {
+            return Err(Error::InvalidDelegateTarget);
+        }
+
+        escrow.delegate = Some(delegate.clone());
+        escrow.delegate_permissions = permissions;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
+
+        env.events().publish(
+            (ESCROW_DELEGATE_SET, bounty_id),
+            EscrowDelegateSetEvent {
+                bounty_id,
+                delegate,
+                permissions,
+                updated_by: caller,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Ok(())
+    }
+
+    pub fn revoke_delegate(env: Env, caller: Address, bounty_id: u64) -> Result<(), Error> {
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        Self::require_escrow_owner_or_admin(&env, &escrow, &caller)?;
+
+        escrow.delegate = None;
+        escrow.delegate_permissions = 0;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
+
+        env.events().publish(
+            (ESCROW_DELEGATE_REVOKED, bounty_id),
+            EscrowDelegateRevokedEvent {
+                bounty_id,
+                revoked_by: caller,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Ok(())
+    }
+
+    pub fn update_metadata(
+        env: Env,
+        caller: Address,
+        bounty_id: u64,
+        metadata: String,
+    ) -> Result<(), Error> {
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        Self::require_escrow_actor(&env, &escrow, &caller, DELEGATE_PERMISSION_UPDATE_META)?;
+
+        escrow.metadata = Some(metadata);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
+
+        env.events().publish(
+            (ESCROW_METADATA_UPDATED, bounty_id),
+            EscrowMetadataUpdatedEvent {
+                bounty_id,
+                updated_by: caller,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
         Ok(())
     }
 
@@ -925,3 +1141,4 @@ pub mod traits {
 
 mod identity_test;
 mod test;
+mod test_dispute_resolution;

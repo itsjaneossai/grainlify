@@ -772,7 +772,7 @@ pub enum DataKey {
     PauseFlags,                  // PauseFlags struct
     AmountPolicy, // Option<(i128, i128)> — (min_amount, max_amount) set by set_amount_policy
     CapabilityNonce, // monotonically increasing capability id
-    Capability(u64), // capability_id -> Capability
+    Capability(BytesN<32>), // capability_id -> Capability
 
     /// Marks a bounty escrow as using non-transferable (soulbound) reward tokens.
     /// When set, the token is expected to disallow further transfers after claim.
@@ -1112,7 +1112,7 @@ impl BountyEscrowContract {
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
-        env.storage().instance().set(&DataKey::Version, &1u32);
+        env.storage().instance().set(&DataKey::Version, &2u32);
 
         events::emit_bounty_initialized(
             &env,
@@ -1285,79 +1285,63 @@ impl BountyEscrowContract {
     }
 
     /// Routes a collected fee to either the default recipient or configured treasury splits.
-    fn route_fee(
-        env: &Env,
-        client: &token::Client,
-        config: &FeeConfig,
-        fee_amount: i128,
-        fee_rate: i128,
-        operation_type: events::FeeOperationType,
-    ) -> Result<(), Error> {
-        if fee_amount <= 0 {
-            return Ok(());
+    fn route_fee(env: &Env, fee_event: events::FeeCollected) {
+        if fee_event.amount <= 0 {
+            return;
         }
+
+        let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
+        let client = token::Client::new(env, &token_addr);
+        let config = Self::get_fee_config_internal(env);
 
         if !config.distribution_enabled || config.treasury_destinations.is_empty() {
             client.transfer(
                 &env.current_contract_address(),
-                &config.fee_recipient,
-                &fee_amount,
+                &fee_event.recipient,
+                &fee_event.amount,
             );
-            events::emit_fee_collected(
-                env,
-                events::FeeCollected {
-                    operation_type,
-                    amount: fee_amount,
-                    fee_rate,
-                    recipient: config.fee_recipient.clone(),
-                    timestamp: env.ledger().timestamp(),
-                },
-            );
-            return Ok(());
+            events::emit_fee_collected(env, fee_event);
+            return;
         }
 
         let mut total_weight: u64 = 0;
         for destination in config.treasury_destinations.iter() {
             total_weight = total_weight
                 .checked_add(destination.weight as u64)
-                .ok_or(Error::InvalidAmount)?;
+                .unwrap_or(u64::MAX);
         }
 
         if total_weight == 0 {
             client.transfer(
                 &env.current_contract_address(),
-                &config.fee_recipient,
-                &fee_amount,
+                &fee_event.recipient,
+                &fee_event.amount,
             );
-            events::emit_fee_collected(
-                env,
-                events::FeeCollected {
-                    operation_type,
-                    amount: fee_amount,
-                    fee_rate,
-                    recipient: config.fee_recipient.clone(),
-                    timestamp: env.ledger().timestamp(),
-                },
-            );
-            return Ok(());
+            events::emit_fee_collected(env, fee_event);
+            return;
         }
 
         let mut distributed = 0i128;
         let destination_count = config.treasury_destinations.len() as usize;
+        let fee_amount = fee_event.amount;
 
         for (index, destination) in config.treasury_destinations.iter().enumerate() {
             let share = if index + 1 == destination_count {
-                fee_amount.checked_sub(distributed).ok_or(Error::InvalidAmount)?
+                match fee_amount.checked_sub(distributed) {
+                    Some(v) => v,
+                    None => return,
+                }
             } else {
                 fee_amount
                     .checked_mul(destination.weight as i128)
                     .and_then(|value| value.checked_div(total_weight as i128))
-                    .ok_or(Error::InvalidAmount)?
+                    .unwrap_or(0)
             };
 
-            distributed = distributed
-                .checked_add(share)
-                .ok_or(Error::InvalidAmount)?;
+            distributed = match distributed.checked_add(share) {
+                Some(v) => v,
+                None => return,
+            };
 
             if share <= 0 {
                 continue;
@@ -1367,16 +1351,15 @@ impl BountyEscrowContract {
             events::emit_fee_collected(
                 env,
                 events::FeeCollected {
-                    operation_type: operation_type.clone(),
+                    operation_type: fee_event.operation_type.clone(),
                     amount: share,
-                    fee_rate,
+                    fee_rate: fee_event.fee_rate,
+                    fee_fixed: fee_event.fee_fixed,
                     recipient: destination.address,
                     timestamp: env.ledger().timestamp(),
                 },
             );
         }
-
-        Ok(())
     }
 
     /// Update fee configuration (admin only)
@@ -1829,17 +1812,17 @@ impl BountyEscrowContract {
         Ok(())
     }
 
-    fn next_capability_id(env: &Env) -> u64 {
-        let last_id: u64 = env
-            .storage()
-            .instance()
-            .get(&DataKey::CapabilityNonce)
-            .unwrap_or(0);
-        let next_id = last_id.saturating_add(1);
-        env.storage()
-            .instance()
-            .set(&DataKey::CapabilityNonce, &next_id);
-        next_id
+    fn next_capability_id(env: &Env) -> BytesN<32> {
+        let mut id = [0u8; 32];
+        let r1: u64 = env.prng().gen();
+        let r2: u64 = env.prng().gen();
+        let r3: u64 = env.prng().gen();
+        let r4: u64 = env.prng().gen();
+        id[0..8].copy_from_slice(&r1.to_be_bytes());
+        id[8..16].copy_from_slice(&r2.to_be_bytes());
+        id[16..24].copy_from_slice(&r3.to_be_bytes());
+        id[24..32].copy_from_slice(&r4.to_be_bytes());
+        BytesN::from_array(env, &id)
     }
 
     fn record_receipt(
@@ -1852,7 +1835,7 @@ impl BountyEscrowContract {
         // Backward-compatible no-op until receipt storage/events are fully wired.
     }
 
-    fn load_capability(env: &Env, capability_id: u64) -> Result<Capability, Error> {
+    fn load_capability(env: &Env, capability_id: BytesN<32>) -> Result<Capability, Error> {
         env.storage()
             .persistent()
             .get(&DataKey::Capability(capability_id))
@@ -2019,12 +2002,12 @@ impl BountyEscrowContract {
     fn consume_capability(
         env: &Env,
         holder: &Address,
-        capability_id: u64,
+        capability_id: BytesN<32>,
         expected_action: CapabilityAction,
         bounty_id: u64,
         amount: i128,
     ) -> Result<Capability, Error> {
-        let mut capability = Self::load_capability(env, capability_id)?;
+        let mut capability = Self::load_capability(env, capability_id.clone())?;
 
         if capability.revoked {
             return Err(Error::CapabilityRevoked);
@@ -2055,12 +2038,11 @@ impl BountyEscrowContract {
         capability.remaining_uses -= 1;
         env.storage()
             .persistent()
-            .set(&DataKey::Capability(capability_id), &capability);
+            .set(&DataKey::Capability(capability_id.clone()), &capability);
 
         events::emit_capability_used(
             env,
-            events::CapabilityUsed {
-                capability_id,
+            events::CapabilityUsed { capability_id: capability_id.clone(),
                 holder: holder.clone(),
                 action: capability.action.clone(),
                 bounty_id,
@@ -2083,7 +2065,7 @@ impl BountyEscrowContract {
         amount_limit: i128,
         expiry: u64,
         max_uses: u32,
-    ) -> Result<u64, Error> {
+    ) -> Result<BytesN<32>, Error> {
         if !env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::NotInitialized);
         }
@@ -2114,12 +2096,11 @@ impl BountyEscrowContract {
 
         env.storage()
             .persistent()
-            .set(&DataKey::Capability(capability_id), &capability);
+            .set(&DataKey::Capability(capability_id.clone()), &capability);
 
         events::emit_capability_issued(
             &env,
-            events::CapabilityIssued {
-                capability_id,
+            events::CapabilityIssued { capability_id: capability_id.clone(),
                 owner,
                 holder,
                 action,
@@ -2134,8 +2115,8 @@ impl BountyEscrowContract {
         Ok(capability_id)
     }
 
-    pub fn revoke_capability(env: Env, owner: Address, capability_id: u64) -> Result<(), Error> {
-        let mut capability = Self::load_capability(&env, capability_id)?;
+    pub fn revoke_capability(env: Env, owner: Address, capability_id: BytesN<32>) -> Result<(), Error> {
+        let mut capability = Self::load_capability(&env, capability_id.clone())?;
         if capability.owner != owner {
             return Err(Error::Unauthorized);
         }
@@ -2148,12 +2129,11 @@ impl BountyEscrowContract {
         capability.revoked = true;
         env.storage()
             .persistent()
-            .set(&DataKey::Capability(capability_id), &capability);
+            .set(&DataKey::Capability(capability_id.clone()), &capability);
 
         events::emit_capability_revoked(
             &env,
-            events::CapabilityRevoked {
-                capability_id,
+            events::CapabilityRevoked { capability_id: capability_id.clone(),
                 owner,
                 revoked_at: env.ledger().timestamp(),
             },
@@ -2162,7 +2142,7 @@ impl BountyEscrowContract {
         Ok(())
     }
 
-    pub fn get_capability(env: Env, capability_id: u64) -> Result<Capability, Error> {
+    pub fn get_capability(env: Env, capability_id: BytesN<32>) -> Result<Capability, Error> {
         Self::load_capability(&env, capability_id)
     }
 
@@ -2504,21 +2484,21 @@ impl BountyEscrowContract {
         // Transfer fee to recipient immediately (separate transfer so it is
         // visible as a distinct on-chain operation).
         if fee_amount > 0 {
-            let token_addr_for_fee: Address =
-                env.storage().instance().get(&DataKey::Token).unwrap();
-            let fee_client = token::Client::new(&env, &token_addr_for_fee);
             // Use global config for treasury distribution, but override fee_recipient
             // with the resolved (per-token or global) fee_recipient.
             let mut fee_config_full: FeeConfig = Self::get_fee_config_internal(&env);
             fee_config_full.fee_recipient = fee_recipient.clone();
             fee_config_full.fee_enabled = fee_enabled;
-            let _ = Self::route_fee(
+            Self::route_fee(
                 &env,
-                &fee_client,
-                &fee_config_full,
-                fee_amount,
-                lock_fee_rate,
-                events::FeeOperationType::Lock,
+                events::FeeCollected {
+                    operation_type: events::FeeOperationType::Lock,
+                    amount: fee_amount,
+                    fee_rate: lock_fee_rate,
+                    fee_fixed: fee_config_full.lock_fixed_fee,
+                    recipient: fee_config_full.fee_recipient.clone(),
+                    timestamp: env.ledger().timestamp(),
+                },
             );
         }
         soroban_sdk::log!(&env, "fee ok");
@@ -2613,11 +2593,7 @@ impl BountyEscrowContract {
     /// This function performs only read operations. No storage writes, token transfers,
     /// or events are emitted.
     pub fn archive_escrow(env: Env, bounty_id: u64) -> Result<(), Error> {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
+        let admin = rbac::require_admin(&env);
         admin.require_auth();
 
         let mut escrow = env
@@ -2999,13 +2975,16 @@ impl BountyEscrowContract {
             let mut fee_config_full: FeeConfig = Self::get_fee_config_internal(&env);
             fee_config_full.fee_recipient = fee_recipient.clone();
             fee_config_full.fee_enabled = fee_enabled;
-            let _ = Self::route_fee(
+            Self::route_fee(
                 &env,
-                &client,
-                &fee_config_full,
-                release_fee,
-                release_fee_rate,
-                events::FeeOperationType::Release,
+                events::FeeCollected {
+                    operation_type: events::FeeOperationType::Release,
+                    amount: release_fee,
+                    fee_rate: release_fee_rate,
+                    fee_fixed: fee_config_full.release_fixed_fee,
+                    recipient: fee_config_full.fee_recipient.clone(),
+                    timestamp: env.ledger().timestamp(),
+                },
             );
         }
 
@@ -3125,7 +3104,7 @@ impl BountyEscrowContract {
         contributor: Address,
         payout_amount: i128,
         holder: Address,
-        capability_id: u64,
+        capability_id: BytesN<32>,
     ) -> Result<(), Error> {
         // GUARD: acquire reentrancy lock
         reentrancy_guard::acquire(&env);
@@ -3361,7 +3340,7 @@ impl BountyEscrowContract {
         env: Env,
         bounty_id: u64,
         holder: Address,
-        capability_id: u64,
+        capability_id: BytesN<32>,
     ) -> Result<(), Error> {
         // GUARD: acquire reentrancy lock
         reentrancy_guard::acquire(&env);
@@ -3445,7 +3424,7 @@ impl BountyEscrowContract {
     pub fn cancel_pending_claim(
         env: Env,
         bounty_id: u64,
-        outcome: DisputeOutcome,
+        _outcome: DisputeOutcome,
     ) -> Result<(), Error> {
         if !env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::NotInitialized);
@@ -3788,6 +3767,7 @@ impl BountyEscrowContract {
                 amount: refund_amount,
                 refund_to: refund_to.clone(),
                 timestamp: now,
+                trigger_type: events::RefundTriggerType::AdminApproval
             },
         );
         Self::record_receipt(
@@ -4052,6 +4032,7 @@ impl BountyEscrowContract {
                 amount: refund_amount,
                 refund_to: refund_to.clone(),
                 timestamp: now,
+                trigger_type: events::RefundTriggerType::AdminApproval
             },
         );
 
@@ -4067,7 +4048,7 @@ impl BountyEscrowContract {
         bounty_id: u64,
         amount: i128,
         holder: Address,
-        capability_id: u64,
+        capability_id: BytesN<32>,
     ) -> Result<(), Error> {
         // GUARD: acquire reentrancy lock
         reentrancy_guard::acquire(&env);
@@ -4159,6 +4140,7 @@ impl BountyEscrowContract {
                 amount,
                 refund_to,
                 timestamp: now,
+                trigger_type: events::RefundTriggerType::AdminApproval
             },
         );
 
@@ -6399,7 +6381,6 @@ mod escrow_status_transition_tests {
 #[cfg(test)]
 mod test_batch_failure_mode;
 #[cfg(test)]
-mod test_batch_failure_modes;
 #[cfg(test)]
 mod test_deadline_variants;
 #[cfg(test)]

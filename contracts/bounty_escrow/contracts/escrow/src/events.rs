@@ -166,10 +166,35 @@ pub fn emit_funds_released(env: &Env, event: FundsReleased) {
     env.events().publish(topics, event.clone());
 }
 
+// ── Refund trigger type ───────────────────────────────────────────────────────
+
+/// Discriminator indicating which code path triggered a refund.
+///
+/// Carried in [`FundsRefunded`] and [`RefundRecord`] so that indexers and
+/// auditors can distinguish between the three refund mechanisms without
+/// inspecting storage or transaction inputs.
+///
+/// | Variant | Trigger |
+/// |---------|---------|
+/// | `AdminApproval` | Admin called `approve_refund` then `refund` (existing dual-auth path). |
+/// | `DeadlineExpired` | `auto_refund` called permissionlessly after the deadline passed. |
+/// | `OracleAttestation` | Configured oracle called `oracle_refund` to attest a dispute outcome. |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RefundTriggerType {
+    /// Admin-approved refund (existing dual-auth behavior).
+    AdminApproval,
+    /// Time-based auto-refund after deadline (permissionless).
+    DeadlineExpired,
+    /// Oracle-attested refund (dispute resolved in favor of depositor).
+    OracleAttestation,
+}
+
 /// Payload for the [`emit_funds_refunded`] event.
 ///
-/// Emitted after a successful refund via [`BountyEscrowContract::refund`]
-/// or `refund_resolved` (anonymous escrow path).
+/// Emitted after a successful refund via [`BountyEscrowContract::refund`],
+/// `refund_resolved` (anonymous escrow path), `oracle_refund`, or
+/// `auto_refund`.
 ///
 /// ### Topics
 /// | Index | Value |
@@ -182,6 +207,8 @@ pub fn emit_funds_released(env: &Env, event: FundsReleased) {
 ///   approval overrides the recipient (e.g. custom partial-refund target).
 /// - For anonymous escrows the depositor identity is never revealed; only
 ///   the on-chain resolver-approved `recipient` is used.
+/// - `trigger_type` identifies which refund path was taken so downstream
+///   consumers can distinguish oracle-attested from time-based refunds.
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FundsRefunded {
@@ -190,11 +217,46 @@ pub struct FundsRefunded {
     pub amount: i128,
     pub refund_to: Address,
     pub timestamp: u64,
+    /// Which code path triggered this refund.
+    pub trigger_type: RefundTriggerType,
 }
 
 /// Emit [`FundsRefunded`].
 pub fn emit_funds_refunded(env: &Env, event: FundsRefunded) {
     let topics = (symbol_short!("f_ref"), event.bounty_id);
+    env.events().publish(topics, event.clone());
+}
+
+// ── Oracle config event ───────────────────────────────────────────────────────
+
+/// Payload for the [`emit_oracle_config_updated`] event.
+///
+/// Emitted when the admin configures or updates the oracle address via
+/// [`BountyEscrowContract::set_oracle`].
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"orc_cfg"` |
+///
+/// ### Security notes
+/// - Only the admin can call `set_oracle`; this event serves as an
+///   on-chain audit trail of oracle configuration changes.
+/// - When `enabled = false` the oracle address is stored but
+///   `oracle_refund` calls will be rejected until re-enabled.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct OracleConfigUpdated {
+    pub version: u32,
+    pub oracle_address: Address,
+    pub enabled: bool,
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
+/// Emit [`OracleConfigUpdated`].
+pub fn emit_oracle_config_updated(env: &Env, event: OracleConfigUpdated) {
+    let topics = (symbol_short!("orc_cfg"),);
     env.events().publish(topics, event.clone());
 }
 
@@ -235,6 +297,7 @@ pub struct FeeCollected {
     pub operation_type: FeeOperationType, // determines if the fee was collected on lock or release.
     pub amount: i128,                     // actual fee amount transferred
     pub fee_rate: i128,                   // fee rate applied in basis points (1 bp = 0.01 %).
+    pub fee_fixed: i128,                  // flat fee component
     pub recipient: Address,
     pub timestamp: u64, // Ledger timestamp.
 }
@@ -291,6 +354,10 @@ pub struct FeeConfigUpdated {
     pub lock_fee_rate: i128,
     /// New release fee rate in basis points.
     pub release_fee_rate: i128,
+    /// New lock fixed fee.
+    pub lock_fixed_fee: i128,
+    /// New release fixed fee.
+    pub release_fixed_fee: i128,
     /// Address designated to receive fees.
     pub fee_recipient: Address,
     /// Whether fee collection is active after this update.
@@ -303,6 +370,26 @@ pub struct FeeConfigUpdated {
 pub fn emit_fee_config_updated(env: &Env, event: FeeConfigUpdated) {
     let topics = (symbol_short!("fee_cfg"),);
     env.events().publish(topics, event.clone());
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct EscrowArchived {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub timestamp: u64,
+}
+
+pub fn emit_archived(env: &Env, bounty_id: u64, timestamp: u64) {
+    let topics = (symbol_short!("archive"), bounty_id);
+    env.events().publish(
+        topics,
+        EscrowArchived {
+            version: EVENT_VERSION_V2,
+            bounty_id,
+            timestamp,
+        },
+    );
 }
 
 /// Payload for the [`emit_fee_routing_updated`] event.
@@ -841,8 +928,8 @@ pub fn emit_emergency_withdraw(env: &Env, event: EmergencyWithdrawEvent) {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityIssued {
-    /// Unique monotonic capability identifier.
-    pub capability_id: u64,
+    /// Unique cryptographically secure capability identifier.
+    pub capability_id: BytesN<32>,
     /// Address that created and vouches for this capability.
     pub owner: Address,
     /// Address authorised to exercise this capability.
@@ -863,7 +950,7 @@ pub struct CapabilityIssued {
 
 /// Emit [`CapabilityIssued`]
 pub fn emit_capability_issued(env: &Env, event: CapabilityIssued) {
-    let topics = (symbol_short!("cap_new"), event.capability_id);
+    let topics = (symbol_short!("cap_new"), event.capability_id.clone());
     env.events().publish(topics, event);
 }
 
@@ -887,7 +974,7 @@ pub fn emit_capability_issued(env: &Env, event: CapabilityIssued) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityUsed {
     /// Capability that was exercised.
-    pub capability_id: u64,
+    pub capability_id: BytesN<32>,
     /// Address that exercised the capability.
     pub holder: Address,
     /// Action that was performed.
@@ -906,7 +993,7 @@ pub struct CapabilityUsed {
 
 /// Emit [`CapabilityUsed`]
 pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
-    let topics = (symbol_short!("cap_use"), event.capability_id);
+    let topics = (symbol_short!("cap_use"), event.capability_id.clone());
     env.events().publish(topics, event);
 }
 
@@ -929,14 +1016,14 @@ pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityRevoked {
     /// Capability that was revoked
-    pub capability_id: u64,
+    pub capability_id: BytesN<32>,
     pub owner: Address,
     pub revoked_at: u64,
 }
 
 /// Emit [`CapabilityRevoked`]
 pub fn emit_capability_revoked(env: &Env, event: CapabilityRevoked) {
-    let topics = (symbol_short!("cap_rev"), event.capability_id);
+    let topics = (symbol_short!("cap_rev"), event.capability_id.clone());
     env.events().publish(topics, event);
 }
 

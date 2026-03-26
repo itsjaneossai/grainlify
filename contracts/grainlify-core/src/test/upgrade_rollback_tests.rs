@@ -132,13 +132,16 @@ fn test_execute_upgrade_with_sufficient_approvals() {
 
     // Propose upgrade
     let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
-    
+
     // Approve with 2 signers (meets threshold)
     client.approve_upgrade(&proposal_id, &signer1);
     client.approve_upgrade(&proposal_id, &signer2);
 
     // Verify proposal is executable
-    assert!(client.can_execute(&proposal_id), "Proposal should be executable");
+    assert!(
+        client.can_execute(&proposal_id),
+        "Proposal should be executable"
+    );
 
     // Execute upgrade (this would work with real WASM)
     // In test environment, we verify the logic without actual WASM deployment
@@ -170,7 +173,7 @@ fn test_execute_upgrade_insufficient_approvals() {
 
     // Propose upgrade
     let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
-    
+
     // Approve with only 2 signers (threshold is 3)
     client.approve_upgrade(&proposal_id, &signer1);
     client.approve_upgrade(&proposal_id, &signer2);
@@ -259,12 +262,18 @@ fn test_execute_upgrade_when_paused() {
     assert!(client.is_paused(), "Contract should be paused");
 
     // Verify can_execute returns false when paused
-    assert!(!client.can_execute(&proposal_id), "Should not execute when paused");
+    assert!(
+        !client.can_execute(&proposal_id),
+        "Should not execute when paused"
+    );
 
     // Unpause and verify it works again
     client.unpause(&signer1);
     assert!(!client.is_paused(), "Contract should be unpaused");
-    assert!(client.can_execute(&proposal_id), "Should execute when unpaused");
+    assert!(
+        client.can_execute(&proposal_id),
+        "Should execute when unpaused"
+    );
 }
 
 #[test]
@@ -292,7 +301,7 @@ fn test_execute_upgrade_already_executed() {
     // Manually mark as executed (simulating previous execution)
     // Note: This would normally be done by execute_upgrade itself
     // For testing, we simulate the state after execution
-    
+
     // Try to execute again - should fail
     // In real implementation, mark_executed would be called internally
     // This test verifies the double-execution protection
@@ -321,7 +330,10 @@ fn test_execute_upgrade_version_tracking() {
 
     // Check previous version is initially none
     let prev_version = client.get_previous_version();
-    assert!(prev_version.is_none(), "Previous version should be initially none");
+    assert!(
+        prev_version.is_none(),
+        "Previous version should be initially none"
+    );
 
     // Create upgrade proposal
     let wasm_hash = upload_wasm(&env);
@@ -387,11 +399,17 @@ fn test_execute_upgrade_security_validations() {
     client.approve_upgrade(&proposal_id, &signer1);
 
     // Test 3: Verify can_execute checks all conditions
-    assert!(client.can_execute(&proposal_id), "Proposal should be executable");
-    
+    assert!(
+        client.can_execute(&proposal_id),
+        "Proposal should be executable"
+    );
+
     // Test 4: Verify pause blocks execution
     client.pause(&signer1);
-    assert!(!client.can_execute(&proposal_id), "Pause should block execution");
+    assert!(
+        !client.can_execute(&proposal_id),
+        "Pause should block execution"
+    );
 }
 
 // ============================================================================

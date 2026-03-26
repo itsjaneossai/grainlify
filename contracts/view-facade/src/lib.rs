@@ -59,19 +59,12 @@ use soroban_sdk::{
 /// Using a `#[contracterror]` enum instead of bare `panic!` strings gives
 /// callers a stable integer discriminant they can match on and surfaces
 /// clearer diagnostics in simulation tools.
+use grainlify_core::errors;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum FacadeError {
-    /// `init` was called on a contract that has already been initialized.
-    ///
-    /// The admin address is immutable after the first successful `init`.
-    /// Re-initialization is explicitly rejected to prevent privilege escalation.
     AlreadyInitialized = 1,
-
-    /// An admin-gated entry-point was called before `init` was invoked.
-    ///
-    /// Deploy then call `init(admin)` before registering any contracts.
     NotInitialized = 2,
 }
 

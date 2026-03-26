@@ -52,7 +52,6 @@ where
 // 2) Regenerate `serialization_goldens.rs` from the printed EXPECTED block.
 
 #[test]
-#[ignore = "Regenerate serialization_goldens.rs after fee schema change — see contracts/FEE_MECHANISM.md"]
 fn serialization_compatibility_public_types_and_events() {
     let env = Env::default();
 
@@ -195,10 +194,10 @@ fn serialization_compatibility_public_types_and_events() {
             ClaimRecord {
                 bounty_id,
                 recipient: recipient.clone(),
+                reason: crate::DisputeReason::Other,
                 amount: 1234,
                 expires_at: 555,
                 claimed: false,
-                reason: DisputeReason::Other,
             }
             .into_val(&env),
         ),
@@ -294,6 +293,7 @@ fn serialization_compatibility_public_types_and_events() {
                 amount: 100,
                 refund_to: depositor.clone(),
                 timestamp: 200,
+                trigger_type: crate::events::RefundTriggerType::DeadlineExpired,
             }
             .into_val(&env),
         ),
@@ -307,6 +307,7 @@ fn serialization_compatibility_public_types_and_events() {
                 operation_type: FeeOperationType::Release,
                 amount: 456,
                 fee_rate: 123,
+                fee_fixed: 0,
                 recipient: fee_recipient.clone(),
                 timestamp: 999,
             }
@@ -389,15 +390,14 @@ fn serialization_compatibility_public_types_and_events() {
             EmergencyWithdrawEvent {
                 admin: admin.clone(),
                 recipient: depositor.clone(),
-                amount: 1000,
-                timestamp: 500,
+                amount: 1000, timestamp: 500,
             }
             .into_val(&env),
         ),
         (
             "CapabilityIssued",
             CapabilityIssued {
-                capability_id: 7,
+                capability_id: BytesN::from_array(&env, &[7u8; 32]),
                 owner: admin.clone(),
                 holder: holder.clone(),
                 action: CapabilityAction::Refund,
@@ -412,7 +412,7 @@ fn serialization_compatibility_public_types_and_events() {
         (
             "CapabilityUsed",
             CapabilityUsed {
-                capability_id: 7,
+                capability_id: BytesN::from_array(&env, &[7u8; 32]),
                 holder: holder.clone(),
                 action: CapabilityAction::Refund,
                 bounty_id,
@@ -426,7 +426,7 @@ fn serialization_compatibility_public_types_and_events() {
         (
             "CapabilityRevoked",
             CapabilityRevoked {
-                capability_id: 7,
+                capability_id: BytesN::from_array(&env, &[7u8; 32]),
                 owner: admin.clone(),
                 revoked_at: 111,
             }
