@@ -23,6 +23,9 @@ pub enum Error {
     DeadlineNotPassed = 6,
     Unauthorized = 7,
     InsufficientBalance = 8,
+    InvalidLabel = 9,
+    TooManyLabels = 10,
+    LabelNotAllowed = 11,
     // Identity-related errors
     InvalidSignature = 100,
     ClaimExpired = 101,
@@ -76,6 +79,8 @@ pub enum DataKey {
     Admin,
     Token,
     Escrow(u64),
+    EscrowIndex,
+    LabelConfig,
     // Identity-related storage keys
     AddressIdentity(Address),
     AuthorizedIssuer(Address),
@@ -90,6 +95,102 @@ pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
+    fn default_label_config(env: &Env) -> LabelConfig {
+        LabelConfig {
+            restricted: false,
+            allowed_labels: Vec::new(env),
+        }
+    }
+
+    fn get_label_config_internal(env: &Env) -> LabelConfig {
+        env.storage()
+            .persistent()
+            .get(&DataKey::LabelConfig)
+            .unwrap_or_else(|| Self::default_label_config(env))
+    }
+
+    fn validate_single_label(label: &String) -> Result<(), Error> {
+        if label.len() == 0 || label.len() > MAX_LABEL_LENGTH {
+            return Err(Error::InvalidLabel);
+        }
+        Ok(())
+    }
+
+    fn normalize_labels(env: &Env, labels: Vec<String>) -> Result<Vec<String>, Error> {
+        if labels.len() > MAX_LABELS {
+            return Err(Error::TooManyLabels);
+        }
+
+        let config = Self::get_label_config_internal(env);
+        let mut normalized = Vec::new(env);
+
+        for label in labels.iter() {
+            Self::validate_single_label(&label)?;
+
+            let mut exists = false;
+            for existing in normalized.iter() {
+                if existing == label {
+                    exists = true;
+                    break;
+                }
+            }
+            if exists {
+                continue;
+            }
+
+            if config.restricted {
+                let mut allowed = false;
+                for candidate in config.allowed_labels.iter() {
+                    if candidate == label {
+                        allowed = true;
+                        break;
+                    }
+                }
+                if !allowed {
+                    return Err(Error::LabelNotAllowed);
+                }
+            }
+
+            normalized.push_back(label);
+        }
+
+        Ok(normalized)
+    }
+
+    fn sanitize_label_config(env: &Env, labels: Vec<String>) -> Result<Vec<String>, Error> {
+        if labels.len() > MAX_LABELS {
+            return Err(Error::TooManyLabels);
+        }
+
+        let mut normalized = Vec::new(env);
+        for label in labels.iter() {
+            Self::validate_single_label(&label)?;
+
+            let mut exists = false;
+            for existing in normalized.iter() {
+                if existing == label {
+                    exists = true;
+                    break;
+                }
+            }
+            if !exists {
+                normalized.push_back(label);
+            }
+        }
+
+        Ok(normalized)
+    }
+
+    fn append_escrow_id(env: &Env, bounty_id: u64) {
+        let mut index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EscrowIndex)
+            .unwrap_or_else(|| Vec::new(env));
+        index.push_back(bounty_id);
+        env.storage().persistent().set(&DataKey::EscrowIndex, &index);
+    }
+
     /// Initialize with admin and token. Call once.
     pub fn init(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Admin) {
@@ -414,6 +515,7 @@ impl EscrowContract {
         env.storage()
             .persistent()
             .set(&DataKey::Escrow(bounty_id), &escrow);
+        Self::append_escrow_id(&env, bounty_id);
 
         // Store jurisdiction config separately if present
         if let OptionalJurisdiction::Some(config) = &jurisdiction {
@@ -445,6 +547,17 @@ impl EscrowContract {
         let contract = env.current_contract_address();
         let token_client = token::Client::new(&env, &token);
         token_client.transfer(&depositor, &contract, &amount);
+
+        env.events().publish(
+            (ESCROW_LABELS_UPDATED, bounty_id),
+            EscrowLabelsUpdatedEvent {
+                version: 1,
+                bounty_id,
+                actor: depositor,
+                labels,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
 
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
@@ -572,6 +685,159 @@ impl EscrowContract {
             .persistent()
             .get(&DataKey::Escrow(bounty_id))
             .ok_or(Error::BountyNotFound)
+    }
+
+    pub fn get_label_config(env: Env) -> LabelConfig {
+        Self::get_label_config_internal(&env)
+    }
+
+    pub fn set_label_config(
+        env: Env,
+        restricted: bool,
+        allowed_labels: Vec<String>,
+    ) -> Result<LabelConfig, Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+
+        let allowed_labels = Self::sanitize_label_config(&env, allowed_labels)?;
+        let config = LabelConfig {
+            restricted,
+            allowed_labels: allowed_labels.clone(),
+        };
+        env.storage().persistent().set(&DataKey::LabelConfig, &config);
+        env.events().publish(
+            (LABEL_CONFIG_UPDATED,),
+            LabelConfigUpdatedEvent {
+                version: 1,
+                admin,
+                restricted,
+                allowed_labels,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+        Ok(config)
+    }
+
+    pub fn update_labels(
+        env: Env,
+        actor: Address,
+        bounty_id: u64,
+        labels: Vec<String>,
+    ) -> Result<Escrow, Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+
+        if actor != admin && actor != escrow.depositor {
+            return Err(Error::Unauthorized);
+        }
+        actor.require_auth();
+
+        let labels = Self::normalize_labels(&env, labels)?;
+        escrow.labels = labels.clone();
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
+        env.events().publish(
+            (ESCROW_LABELS_UPDATED, bounty_id),
+            EscrowLabelsUpdatedEvent {
+                version: 1,
+                bounty_id,
+                actor,
+                labels,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+        Ok(escrow)
+    }
+
+    pub fn get_escrows_by_label(
+        env: Env,
+        label: String,
+        cursor: Option<u64>,
+        limit: u32,
+    ) -> EscrowLabelPage {
+        let effective_limit = if limit == 0 || limit > MAX_PAGE_SIZE {
+            MAX_PAGE_SIZE
+        } else {
+            limit
+        };
+        let index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EscrowIndex)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut records: Vec<EscrowLabelRecord> = Vec::new(&env);
+        let mut collecting = cursor.is_none();
+        let mut next_cursor = None;
+        let mut has_more = false;
+
+        for i in 0..index.len() {
+            let id = index.get(i).unwrap();
+            if !collecting {
+                if Some(id) == cursor {
+                    collecting = true;
+                }
+                continue;
+            }
+
+            let Some(escrow) = env
+                .storage()
+                .persistent()
+                .get::<_, Escrow>(&DataKey::Escrow(id))
+            else {
+                continue;
+            };
+
+            let mut matches = false;
+            for escrow_label in escrow.labels.iter() {
+                if escrow_label == label {
+                    matches = true;
+                    break;
+                }
+            }
+            if !matches {
+                continue;
+            }
+
+            if records.len() >= effective_limit {
+                has_more = true;
+                break;
+            }
+
+            next_cursor = Some(id);
+            records.push_back(EscrowLabelRecord {
+                bounty_id: id,
+                depositor: escrow.depositor,
+                amount: escrow.amount,
+                remaining_amount: escrow.remaining_amount,
+                status: escrow.status,
+                deadline: escrow.deadline,
+                labels: escrow.labels,
+            });
+        }
+
+        if !has_more {
+            next_cursor = None;
+        }
+
+        EscrowLabelPage {
+            records,
+            next_cursor,
+            has_more,
+        }
     }
 }
 

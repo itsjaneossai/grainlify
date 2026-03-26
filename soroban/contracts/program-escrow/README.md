@@ -20,3 +20,12 @@ vector instead of direct storage scans.
 - the current implementation assumes registrations are append-only for
   discoverability; if deletions are introduced later, the index maintenance
   rules should be updated alongside the query documentation and tests
+
+## Label semantics
+
+- programs can store up to 10 labels
+- each label must be 1..=32 characters
+- duplicate labels are collapsed while preserving first-seen order
+- admins can switch labels between open mode and a restricted allowlist
+- labels are queryable through `get_programs_by_label`
+- label creation and updates emit dedicated events for indexers

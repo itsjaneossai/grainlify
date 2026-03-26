@@ -536,3 +536,125 @@ fn test_search_includes_jurisdiction_enabled_programs() {
     assert_eq!(record.name, String::from_str(&env, "Jurisdiction Program"));
     assert_eq!(client.get_program_jurisdiction(&10), Some(jurisdiction));
 }
+
+#[test]
+fn test_get_programs_by_label_filters_results() {
+    setup_search!(
+        env, client, _contract_id, _admin, program_admin,
+        _token_client, _token_admin, 100_000i128
+    );
+
+    let payroll = vec![
+        &env,
+        String::from_str(&env, "payroll"),
+        String::from_str(&env, "grant-2024"),
+    ];
+    let milestone = vec![
+        &env,
+        String::from_str(&env, "milestone-1"),
+    ];
+
+    client.register_program_with_labels(
+        &1,
+        &program_admin,
+        &String::from_str(&env, "Payroll A"),
+        &1_000,
+        &payroll,
+    );
+    client.register_program_with_labels(
+        &2,
+        &program_admin,
+        &String::from_str(&env, "Milestone B"),
+        &1_000,
+        &milestone,
+    );
+    client.register_program_with_labels(
+        &3,
+        &program_admin,
+        &String::from_str(&env, "Payroll C"),
+        &1_000,
+        &payroll,
+    );
+
+    let page = client.get_programs_by_label(&String::from_str(&env, "payroll"), &None, &10);
+    assert_eq!(page.records.len(), 2);
+    assert_eq!(page.records.get(0).unwrap().program_id, 1);
+    assert_eq!(page.records.get(1).unwrap().program_id, 3);
+}
+
+#[test]
+fn test_update_program_labels_by_program_admin() {
+    setup_search!(
+        env, client, _contract_id, contract_admin, program_admin,
+        _token_client, token_admin, 100_000i128
+    );
+
+    client.register_program(
+        &9,
+        &program_admin,
+        &String::from_str(&env, "Grant Program"),
+        &1_000,
+    );
+
+    let labels = vec![
+        &env,
+        String::from_str(&env, "grant-2024"),
+        String::from_str(&env, "milestone-1"),
+    ];
+    let updated = client.update_program_labels(&program_admin, &9, &labels);
+
+    assert_eq!(updated.labels.len(), 2);
+    assert_eq!(updated.labels.get(0).unwrap(), String::from_str(&env, "grant-2024"));
+    assert_eq!(client.get_program(&9).labels.len(), 2);
+
+    let admin_update = vec![&env, String::from_str(&env, "payroll")];
+    let updated_by_contract_admin = client.update_program_labels(&contract_admin, &9, &admin_update);
+    assert_eq!(updated_by_contract_admin.labels.len(), 1);
+    assert_eq!(updated_by_contract_admin.labels.get(0).unwrap(), String::from_str(&env, "payroll"));
+
+    let outsider = Address::generate(&env);
+    token_admin.mint(&outsider, &1_000);
+    let denied = client.try_update_program_labels(&outsider, &9, &admin_update);
+    assert!(denied.is_err());
+}
+
+#[test]
+fn test_restricted_label_config_is_enforced() {
+    setup_search!(
+        env, client, _contract_id, contract_admin, program_admin,
+        _token_client, _token_admin, 100_000i128
+    );
+
+    let allowed = vec![
+        &env,
+        String::from_str(&env, "payroll"),
+        String::from_str(&env, "grant-2024"),
+    ];
+    let config = client.set_label_config(&true, &allowed);
+    assert!(config.restricted);
+    assert_eq!(config.allowed_labels.len(), 2);
+
+    let allowed_labels = vec![&env, String::from_str(&env, "payroll")];
+    client.register_program_with_labels(
+        &20,
+        &program_admin,
+        &String::from_str(&env, "Allowed"),
+        &1_000,
+        &allowed_labels,
+    );
+
+    let blocked_labels = vec![&env, String::from_str(&env, "milestone-1")];
+    let blocked = client.try_register_program_with_labels(
+        &21,
+        &program_admin,
+        &String::from_str(&env, "Blocked"),
+        &1_000,
+        &blocked_labels,
+    );
+    assert!(blocked.is_err());
+
+    let fetched = client.get_label_config();
+    assert_eq!(fetched.allowed_labels.len(), 2);
+    assert_eq!(fetched.allowed_labels.get(0).unwrap(), String::from_str(&env, "payroll"));
+    assert_eq!(client.get_program(&20).labels.get(0).unwrap(), String::from_str(&env, "payroll"));
+}

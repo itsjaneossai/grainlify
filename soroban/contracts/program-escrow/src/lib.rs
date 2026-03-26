@@ -23,7 +23,11 @@ use soroban_sdk::{
 
 const MAX_BATCH_SIZE: u32 = 20;
 const MAX_PAGE_SIZE: u32 = 20;
+const MAX_LABELS: u32 = 10;
+const MAX_LABEL_LENGTH: u32 = 32;
 const PROGRAM_REGISTERED: soroban_sdk::Symbol = symbol_short!("prg_reg");
+const PROGRAM_LABELS_UPDATED: soroban_sdk::Symbol = symbol_short!("prg_lbl");
+const LABEL_CONFIG_UPDATED: soroban_sdk::Symbol = symbol_short!("lbl_cfg");
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -42,6 +46,9 @@ pub enum Error {
     JurisdictionKycRequired = 11,
     JurisdictionFundingLimitExceeded = 12,
     JurisdictionPaused = 13,
+    InvalidLabel = 14,
+    TooManyLabels = 15,
+    LabelNotAllowed = 16,
 }
 
 #[contracttype]
@@ -76,6 +83,7 @@ pub struct Program {
     pub total_funding: i128,
     pub status: ProgramStatus,
     pub jurisdiction: OptionalJurisdiction,
+    pub labels: Vec<String>,
 }
 
 #[contracttype]
@@ -120,6 +128,34 @@ pub struct ProgramRegisteredEvent {
     pub requires_kyc: bool,
     pub max_funding: Option<i128>,
     pub registration_paused: bool,
+    pub labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelConfig {
+    pub restricted: bool,
+    pub allowed_labels: Vec<String>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgramLabelsUpdatedEvent {
+    pub version: u32,
+    pub program_id: u64,
+    pub actor: Address,
+    pub labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelConfigUpdatedEvent {
+    pub version: u32,
+    pub admin: Address,
+    pub restricted: bool,
+    pub allowed_labels: Vec<String>,
     pub timestamp: u64,
 }
 
@@ -133,6 +169,7 @@ pub enum DataKey {
     /// Stable index used by `get_programs` and `get_program_count`.
     ProgramIndex,
     DeprecationState,
+    LabelConfig,
 }
 
 /// Filter inputs for cursor-based program search.
@@ -244,6 +281,7 @@ impl ProgramEscrowContract {
         admin: Address,
         total_funding: i128,
         jurisdiction: &OptionalJurisdiction,
+        labels: &Vec<String>,
     ) {
         let (jurisdiction_tag, requires_kyc, max_funding, registration_paused) =
             if let OptionalJurisdiction::Some(config) = jurisdiction {
@@ -268,9 +306,96 @@ impl ProgramEscrowContract {
                 requires_kyc,
                 max_funding,
                 registration_paused,
+                labels: labels.clone(),
                 timestamp: env.ledger().timestamp(),
             },
         );
+    }
+
+    fn default_label_config(env: &Env) -> LabelConfig {
+        LabelConfig {
+            restricted: false,
+            allowed_labels: Vec::new(env),
+        }
+    }
+
+    fn get_label_config_internal(env: &Env) -> LabelConfig {
+        env.storage()
+            .persistent()
+            .get(&DataKey::LabelConfig)
+            .unwrap_or_else(|| Self::default_label_config(env))
+    }
+
+    fn validate_single_label(label: &String) -> Result<(), Error> {
+        if label.len() == 0 || label.len() > MAX_LABEL_LENGTH {
+            return Err(Error::InvalidLabel);
+        }
+        Ok(())
+    }
+
+    fn normalize_labels(env: &Env, labels: Vec<String>) -> Result<Vec<String>, Error> {
+        if labels.len() > MAX_LABELS {
+            return Err(Error::TooManyLabels);
+        }
+
+        let config = Self::get_label_config_internal(env);
+        let mut normalized = Vec::new(env);
+
+        for label in labels.iter() {
+            Self::validate_single_label(&label)?;
+
+            let mut exists = false;
+            for existing in normalized.iter() {
+                if existing == label {
+                    exists = true;
+                    break;
+                }
+            }
+            if exists {
+                continue;
+            }
+
+            if config.restricted {
+                let mut allowed = false;
+                for candidate in config.allowed_labels.iter() {
+                    if candidate == label {
+                        allowed = true;
+                        break;
+                    }
+                }
+                if !allowed {
+                    return Err(Error::LabelNotAllowed);
+                }
+            }
+
+            normalized.push_back(label);
+        }
+
+        Ok(normalized)
+    }
+
+    fn sanitize_label_config(env: &Env, labels: Vec<String>) -> Result<Vec<String>, Error> {
+        if labels.len() > MAX_LABELS {
+            return Err(Error::TooManyLabels);
+        }
+
+        let mut normalized = Vec::new(env);
+        for label in labels.iter() {
+            Self::validate_single_label(&label)?;
+
+            let mut exists = false;
+            for existing in normalized.iter() {
+                if existing == label {
+                    exists = true;
+                    break;
+                }
+            }
+            if !exists {
+                normalized.push_back(label);
+            }
+        }
+
+        Ok(normalized)
     }
 
     fn order_batch_registration_items(
@@ -365,6 +490,9 @@ impl ProgramEscrowContract {
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage()
+            .persistent()
+            .set(&DataKey::LabelConfig, &Self::default_label_config(&env));
         Ok(())
     }
 
@@ -376,7 +504,27 @@ impl ProgramEscrowContract {
         name: String,
         total_funding: i128,
     ) -> Result<(), Error> {
-        Self::register_program_juris(
+        let empty_labels = Vec::new(&env);
+        Self::register_program_with_labels(
+            env,
+            program_id,
+            admin,
+            name,
+            total_funding,
+            empty_labels,
+        )
+    }
+
+    /// Register a single program with labels.
+    pub fn register_program_with_labels(
+        env: Env,
+        program_id: u64,
+        admin: Address,
+        name: String,
+        total_funding: i128,
+        labels: Vec<String>,
+    ) -> Result<(), Error> {
+        Self::register_program_internal(
             env,
             program_id,
             admin,
@@ -388,6 +536,7 @@ impl ProgramEscrowContract {
             false,
             OptionalJurisdiction::None,
             None,
+            labels,
         )
     }
 
@@ -404,6 +553,37 @@ impl ProgramEscrowContract {
         juris_registration_paused: bool,
         jurisdiction: OptionalJurisdiction,
         kyc_attested: Option<bool>,
+    ) -> Result<(), Error> {
+        let empty_labels = Vec::new(&env);
+        Self::register_program_internal(
+            env,
+            program_id,
+            admin,
+            name,
+            total_funding,
+            juris_tag,
+            juris_requires_kyc,
+            juris_max_funding,
+            juris_registration_paused,
+            jurisdiction,
+            kyc_attested,
+            empty_labels,
+        )
+    }
+
+    fn register_program_internal(
+        env: Env,
+        program_id: u64,
+        admin: Address,
+        name: String,
+        total_funding: i128,
+        juris_tag: Option<String>,
+        juris_requires_kyc: bool,
+        juris_max_funding: Option<i128>,
+        juris_registration_paused: bool,
+        jurisdiction: OptionalJurisdiction,
+        kyc_attested: Option<bool>,
+        labels: Vec<String>,
     ) -> Result<(), Error> {
         Self::ensure_initialized(&env)?;
         Self::ensure_not_deprecated(&env)?;
@@ -427,6 +607,7 @@ impl ProgramEscrowContract {
             jurisdiction,
         );
         Self::enforce_jurisdiction_rules(&jurisdiction, total_funding, kyc_attested)?;
+        let labels = Self::normalize_labels(&env, labels)?;
 
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_addr);
@@ -439,10 +620,28 @@ impl ProgramEscrowContract {
             total_funding,
             status: ProgramStatus::Active,
             jurisdiction: jurisdiction.clone(),
+            labels: labels.clone(),
         };
         Self::store_program(&env, program_id, &program);
         Self::append_program_id(&env, program_id);
-        Self::emit_program_registered(&env, program_id, admin, total_funding, &jurisdiction);
+        Self::emit_program_registered(
+            &env,
+            program_id,
+            admin.clone(),
+            total_funding,
+            &jurisdiction,
+            &labels,
+        );
+        env.events().publish(
+            (PROGRAM_LABELS_UPDATED, program_id),
+            ProgramLabelsUpdatedEvent {
+                version: 1,
+                program_id,
+                actor: admin,
+                labels,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
         Ok(())
     }
 
@@ -540,6 +739,7 @@ impl ProgramEscrowContract {
                 total_funding: item.total_funding,
                 status: ProgramStatus::Active,
                 jurisdiction: OptionalJurisdiction::None,
+                labels: Vec::new(&env),
             };
             Self::store_program(&env, item.program_id, &program);
             Self::append_program_id(&env, item.program_id);
@@ -549,6 +749,7 @@ impl ProgramEscrowContract {
                 item.admin.clone(),
                 item.total_funding,
                 &OptionalJurisdiction::None,
+                &program.labels,
             );
             registered_count += 1;
         }
@@ -636,6 +837,7 @@ impl ProgramEscrowContract {
                 total_funding: item.total_funding,
                 status: ProgramStatus::Active,
                 jurisdiction: jurisdiction.clone(),
+                labels: Vec::new(&env),
             };
             Self::store_program(&env, item.program_id, &program);
             Self::append_program_id(&env, item.program_id);
@@ -645,6 +847,7 @@ impl ProgramEscrowContract {
                 item.admin.clone(),
                 item.total_funding,
                 &jurisdiction,
+                &program.labels,
             );
             registered_count += 1;
         }
@@ -718,6 +921,148 @@ impl ProgramEscrowContract {
             .storage()
             .persistent()
             .get(&DataKey::ProgramJurisdiction(program_id)))
+    }
+
+    pub fn get_label_config(env: Env) -> LabelConfig {
+        Self::get_label_config_internal(&env)
+    }
+
+    pub fn set_label_config(
+        env: Env,
+        restricted: bool,
+        allowed_labels: Vec<String>,
+    ) -> Result<LabelConfig, Error> {
+        Self::ensure_initialized(&env)?;
+        let admin = Self::require_contract_admin(&env);
+        let normalized = Self::sanitize_label_config(&env, allowed_labels)?;
+        let config = LabelConfig {
+            restricted,
+            allowed_labels: normalized.clone(),
+        };
+        env.storage().persistent().set(&DataKey::LabelConfig, &config);
+        env.events().publish(
+            (LABEL_CONFIG_UPDATED,),
+            LabelConfigUpdatedEvent {
+                version: 1,
+                admin,
+                restricted,
+                allowed_labels: normalized,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+        Ok(config)
+    }
+
+    pub fn update_program_labels(
+        env: Env,
+        actor: Address,
+        program_id: u64,
+        labels: Vec<String>,
+    ) -> Result<Program, Error> {
+        Self::ensure_initialized(&env)?;
+        let contract_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        let mut program: Program = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Program(program_id))
+            .ok_or(Error::ProgramNotFound)?;
+
+        if actor != contract_admin && actor != program.admin {
+            return Err(Error::Unauthorized);
+        }
+        actor.require_auth();
+
+        let labels = Self::normalize_labels(&env, labels)?;
+        program.labels = labels.clone();
+        Self::store_program(&env, program_id, &program);
+        env.events().publish(
+            (PROGRAM_LABELS_UPDATED, program_id),
+            ProgramLabelsUpdatedEvent {
+                version: 1,
+                program_id,
+                actor,
+                labels,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+        Ok(program)
+    }
+
+    pub fn get_programs_by_label(
+        env: Env,
+        label: String,
+        cursor: Option<u64>,
+        limit: u32,
+    ) -> ProgramPage {
+        let effective_limit = if limit == 0 || limit > MAX_PAGE_SIZE {
+            MAX_PAGE_SIZE
+        } else {
+            limit
+        };
+        let index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ProgramIndex)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut records: Vec<ProgramRecord> = Vec::new(&env);
+        let mut collecting = cursor.is_none();
+        let mut next_cursor = None;
+        let mut has_more = false;
+
+        for i in 0..index.len() {
+            let id = index.get(i).unwrap();
+
+            if !collecting {
+                if Some(id) == cursor {
+                    collecting = true;
+                }
+                continue;
+            }
+
+            let Some(program) = env
+                .storage()
+                .persistent()
+                .get::<_, Program>(&DataKey::Program(id))
+            else {
+                continue;
+            };
+
+            let mut matches = false;
+            for program_label in program.labels.iter() {
+                if program_label == label {
+                    matches = true;
+                    break;
+                }
+            }
+            if !matches {
+                continue;
+            }
+
+            if records.len() >= effective_limit {
+                has_more = true;
+                break;
+            }
+
+            next_cursor = Some(id);
+            records.push_back(ProgramRecord {
+                program_id: id,
+                admin: program.admin,
+                name: program.name,
+                total_funding: program.total_funding,
+                status: program.status,
+            });
+        }
+
+        if !has_more {
+            next_cursor = None;
+        }
+
+        ProgramPage {
+            records,
+            next_cursor,
+            has_more,
+        }
     }
 
     /// Return the total number of program ids tracked in the search index.

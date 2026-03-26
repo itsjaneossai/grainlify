@@ -171,52 +171,6 @@ fn parity_refund_before_deadline_fails() {
     assert!(res.is_err());
 }
 
-// --- Jurisdiction: generic escrows remain untagged ---
-#[test]
-fn test_generic_escrow_has_no_jurisdiction_config() {
-    let env = Env::default();
-    let amount = 10_000i128;
-    let (client, _cid, _admin, depositor, _contributor, _token_client) = setup(&env, amount);
-
-    let bounty_id = 50u64;
-    let deadline = env.ledger().timestamp() + 1000;
-    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
-
-    let cfg = client.get_escrow_jurisdiction(&bounty_id);
-    assert_eq!(cfg, OptionalJurisdiction::None);
-}
-
-// --- Jurisdiction: tagged escrows can override identity-limit enforcement ---
-#[test]
-fn test_jurisdiction_tagged_escrow_can_skip_identity_limits() {
-    let env = Env::default();
-    let amount = 2_000_0000000i128; // above default unverified limit
-    let (client, _cid, _admin, depositor, _contributor, _token_client) = setup(&env, amount);
-
-    let bounty_id = 51u64;
-    let deadline = env.ledger().timestamp() + 1000;
-    let cfg = EscrowJurisdictionConfig {
-        tag: Some(String::from_str(&env, "US-only")),
-        requires_kyc: false,
-        enforce_identity_limits: false,
-        lock_paused: false,
-        release_paused: false,
-        refund_paused: false,
-        max_lock_amount: Some(3_000_0000000),
-    };
-
-    client.lock_funds_with_jurisdiction(
-        &depositor,
-        &bounty_id,
-        &amount,
-        &deadline,
-        &OptionalJurisdiction::Some(cfg.clone()),
-    );
-
-    let stored = client.get_escrow_jurisdiction(&bounty_id);
-    assert_eq!(stored, OptionalJurisdiction::Some(cfg));
-}
-
 #[test]
 fn test_generic_escrow_still_enforces_identity_limits() {
     let env = Env::default();

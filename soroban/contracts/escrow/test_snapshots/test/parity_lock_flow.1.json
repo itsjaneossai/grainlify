@@ -234,14 +234,10 @@
                     },
                     {
                       "key": {
-                        "symbol": "jurisdiction"
+                        "symbol": "labels"
                       },
                       "val": {
-                        "vec": [
-                          {
-                            "symbol": "None"
-                          }
-                        ]
+                        "vec": []
                       }
                     },
                     {
