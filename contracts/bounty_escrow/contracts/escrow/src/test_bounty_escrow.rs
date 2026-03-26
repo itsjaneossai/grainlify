@@ -634,8 +634,14 @@ fn test_update_fee_config_rejects_negative_lock_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&Some(-1), &None, &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &Some(-1),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -659,8 +665,14 @@ fn test_update_fee_config_rejects_negative_release_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&None, &Some(-1), &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &None,
+        &Some(-1),
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -684,8 +696,14 @@ fn test_update_fee_config_rejects_over_max_lock_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&Some(5001), &None, &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &Some(5001),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -709,8 +727,14 @@ fn test_update_fee_config_rejects_over_max_release_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&None, &Some(5001), &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &None,
+        &Some(5001),
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -734,8 +758,14 @@ fn test_update_fee_config_rejects_overflow_lock_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&Some(i128::MAX), &None, &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &Some(i128::MAX),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -759,8 +789,14 @@ fn test_update_fee_config_rejects_overflow_release_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&None, &Some(i128::MAX), &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &None,
+        &Some(i128::MAX),
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -865,7 +901,14 @@ fn test_update_fee_config_partial_updates_preserve_existing_values() {
     client.init(&admin, &token);
 
     // First update: Set lock fee, release fee, and recipient
-    client.update_fee_config(&Some(100), &Some(200), &None, &None, &Some(fee_recipient_1.clone()), &Some(true));
+    client.update_fee_config(
+        &Some(100),
+        &Some(200),
+        &None,
+        &None,
+        &Some(fee_recipient_1.clone()),
+        &Some(true),
+    );
 
     // Second update: Only update lock fee, other values should remain unchanged
     client.update_fee_config(&Some(300), &None, &None, &None, &None, &None);
@@ -877,7 +920,14 @@ fn test_update_fee_config_partial_updates_preserve_existing_values() {
     assert!(config.fee_enabled); // Should remain true
 
     // Third update: Update recipient and enabled flag
-    client.update_fee_config(&None, &None, &None, &None, &Some(fee_recipient_2.clone()), &Some(false));
+    client.update_fee_config(
+        &None,
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient_2.clone()),
+        &Some(false),
+    );
 
     let config = client.get_fee_config();
     assert_eq!(config.lock_fee_rate, 300); // Should remain 300
@@ -897,7 +947,14 @@ fn test_update_fee_config_fails_with_one_invalid_rate_preserves_state() {
 
     client.init(&admin, &token);
 
-    client.update_fee_config(&Some(100), &Some(200), &None, &None, &Some(fee_recipient.clone()), &None);
+    client.update_fee_config(
+        &Some(100),
+        &Some(200),
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
 
     let original_config = client.get_fee_config();
 
@@ -922,8 +979,14 @@ fn test_update_fee_config_rejects_100_percent_lock_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&Some(10_000), &None, &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &Some(10_000),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -947,8 +1010,14 @@ fn test_update_fee_config_rejects_100_percent_release_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&None, &Some(10_000), &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &None,
+        &Some(10_000),
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -972,8 +1041,14 @@ fn test_update_fee_config_rejects_over_100_percent_lock_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&Some(10_001), &None, &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &Some(10_001),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();
@@ -997,8 +1072,14 @@ fn test_update_fee_config_rejects_over_100_percent_release_fee() {
 
     let original_config = client.get_fee_config();
 
-    let result =
-        client.try_update_fee_config(&None, &Some(10_001), &None, &None, &Some(fee_recipient.clone()), &None);
+    let result = client.try_update_fee_config(
+        &None,
+        &Some(10_001),
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &None,
+    );
     assert_eq!(result, Err(Ok(ContractError::InvalidFeeRate)));
 
     let current_config = client.get_fee_config();

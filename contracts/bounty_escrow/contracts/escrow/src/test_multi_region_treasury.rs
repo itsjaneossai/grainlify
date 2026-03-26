@@ -198,7 +198,7 @@ mod test_multi_region_treasury {
 
         // Configure fee and treasury distribution
         client.set_treasury_distributions(&destinations, &true);
-        client.update_fee_config(&Some(1000), &Some(500), &None, &None, &None, &Some(true)) // 10% lock, 5% release
+        client.update_fee_config(&Some(1000), &Some(500), &None, &None, &None, &Some(true)); // 10% lock, 5% release
 
         // Mint tokens to depositor
         token_minter.mint(&depositor, &1000);
@@ -234,7 +234,14 @@ mod test_multi_region_treasury {
         let client = make_escrow_instance(&env, &admin, &token_addr);
 
         // Configure fee with single recipient (no treasury distribution)
-        client.update_fee_config(&Some(1000), &Some(500), &None, &None, &Some(fee_recipient.clone()), &Some(true));
+        client.update_fee_config(
+            &Some(1000),
+            &Some(500),
+            &None,
+            &None,
+            &Some(fee_recipient.clone()),
+            &Some(true),
+        );
 
         // Mint tokens to depositor
         token_minter.mint(&depositor, &1000);

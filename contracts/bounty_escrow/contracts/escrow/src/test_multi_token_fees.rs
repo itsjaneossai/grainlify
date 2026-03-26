@@ -121,17 +121,30 @@ fn test_calculate_fee_max_rate() {
 #[test]
 fn test_set_token_fee_config_invalid_lock_rate_rejected() {
     let s = Suite::new();
-    let result = s.client.try_set_token_fee_config(&s.token_id, &5_001, // above MAX_FEE_RATE
-        &0, &0, &0, &s.fee_recipient, &true);
+    let result = s.client.try_set_token_fee_config(
+        &s.token_id,
+        &5_001, // above MAX_FEE_RATE
+        &0,
+        &0,
+        &0,
+        &s.fee_recipient,
+        &true,
+    );
     assert_eq!(result.unwrap_err().unwrap(), Error::InvalidFeeRate);
 }
 
 #[test]
 fn test_set_token_fee_config_invalid_release_rate_rejected() {
     let s = Suite::new();
-    let result =
-        s.client
-            .try_set_token_fee_config(&s.token_id, &0, &10_001, &0, &0, &s.fee_recipient, &true);
+    let result = s.client.try_set_token_fee_config(
+        &s.token_id,
+        &0,
+        &10_001,
+        &0,
+        &0,
+        &s.fee_recipient,
+        &true,
+    );
     assert_eq!(result.unwrap_err().unwrap(), Error::InvalidFeeRate);
 }
 
@@ -271,7 +284,14 @@ fn test_per_token_config_overrides_global() {
     let s = Suite::new();
 
     // Global: 1% lock fee
-    s.client.update_fee_config(&Some(100i128), &Some(0i128), &None, &None, &Some(s.admin.clone()), &Some(true));
+    s.client.update_fee_config(
+        &Some(100i128),
+        &Some(0i128),
+        &None,
+        &None,
+        &Some(s.admin.clone()),
+        &Some(true),
+    );
 
     // Per-token: 3% lock fee to fee_recipient
     s.client
@@ -296,7 +316,14 @@ fn test_global_fee_used_when_no_token_config() {
     let s = Suite::new();
 
     // Global: 1% lock fee to fee_recipient
-    s.client.update_fee_config(&Some(100i128), &Some(0i128), &None, &None, &Some(s.fee_recipient.clone()), &Some(true));
+    s.client.update_fee_config(
+        &Some(100i128),
+        &Some(0i128),
+        &None,
+        &None,
+        &Some(s.fee_recipient.clone()),
+        &Some(true),
+    );
 
     let amount = 100_000i128;
     s.fund_depositor(amount);

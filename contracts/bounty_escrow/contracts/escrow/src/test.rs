@@ -1841,24 +1841,28 @@ fn test_combined_fee_percentage_plus_fixed_capped() {
         BountyEscrowContract::combined_fee_pub(10_000, 100, 50, true),
         150
     );
-    assert_eq!(BountyEscrowContract::combined_fee_pub(100, 0, 500, true), 100);
-    assert_eq!(BountyEscrowContract::combined_fee_pub(10_000, 0, 0, false), 0);
+    assert_eq!(
+        BountyEscrowContract::combined_fee_pub(100, 0, 500, true),
+        100
+    );
+    assert_eq!(
+        BountyEscrowContract::combined_fee_pub(10_000, 0, 0, false),
+        0
+    );
 }
 
 #[test]
 fn test_lock_and_release_fixed_fee_collection() {
     let setup = TestSetup::new();
     let fee_recipient = Address::generate(&setup.env);
-    setup
-        .escrow
-        .update_fee_config(
-            &None,
-            &None,
-            &Some(10i128),
-            &Some(25i128),
-            &Some(fee_recipient.clone()),
-            &Some(true),
-        );
+    setup.escrow.update_fee_config(
+        &None,
+        &None,
+        &Some(10i128),
+        &Some(25i128),
+        &Some(fee_recipient.clone()),
+        &Some(true),
+    );
     let bounty_id = 901_u64;
     let deadline = setup.env.ledger().timestamp() + 1_000;
     let gross = 1_000i128;
@@ -1871,14 +1875,10 @@ fn test_lock_and_release_fixed_fee_collection() {
     assert_eq!(setup.token.balance(&fee_recipient), lock_fee);
 
     setup.escrow.release_funds(&bounty_id, &setup.contributor);
-    let release_fee =
-        BountyEscrowContract::combined_fee_pub(escrow.amount, 0, 25, true);
+    let release_fee = BountyEscrowContract::combined_fee_pub(escrow.amount, 0, 25, true);
     assert_eq!(
         setup.token.balance(&setup.contributor),
         escrow.amount - release_fee
     );
-    assert_eq!(
-        setup.token.balance(&fee_recipient),
-        lock_fee + release_fee
-    );
+    assert_eq!(setup.token.balance(&fee_recipient), lock_fee + release_fee);
 }

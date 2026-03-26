@@ -18,20 +18,20 @@ mod reentrancy_guard;
 #[cfg(test)]
 mod test_metadata;
 
+pub mod gas_budget;
 #[cfg(test)]
 mod test_boundary_edge_cases;
 mod test_cross_contract_interface;
 #[cfg(test)]
 mod test_deterministic_randomness;
 #[cfg(test)]
-mod test_multi_token_fees;
-#[cfg(test)]
 mod test_multi_region_treasury;
+#[cfg(test)]
+mod test_multi_token_fees;
 #[cfg(test)]
 mod test_rbac;
 #[cfg(test)]
 mod test_risk_flags;
-pub mod gas_budget;
 mod traits;
 pub mod upgrade_safety;
 
@@ -1222,12 +1222,7 @@ impl BountyEscrowContract {
 
     /// Test-only: combined percentage + fixed fee (capped).
     #[cfg(test)]
-    pub fn combined_fee_pub(
-        amount: i128,
-        rate_bps: i128,
-        fixed: i128,
-        fee_enabled: bool,
-    ) -> i128 {
+    pub fn combined_fee_pub(amount: i128, rate_bps: i128, fixed: i128, fee_enabled: bool) -> i128 {
         Self::combined_fee_amount(amount, rate_bps, fixed, fee_enabled)
     }
 
@@ -1347,7 +1342,9 @@ impl BountyEscrowContract {
 
         for (index, destination) in config.treasury_destinations.iter().enumerate() {
             let share = if index + 1 == destination_count {
-                fee_amount.checked_sub(distributed).ok_or(Error::InvalidAmount)?
+                fee_amount
+                    .checked_sub(distributed)
+                    .ok_or(Error::InvalidAmount)?
             } else {
                 fee_amount
                     .checked_mul(destination.weight as i128)
@@ -1355,15 +1352,17 @@ impl BountyEscrowContract {
                     .ok_or(Error::InvalidAmount)?
             };
 
-            distributed = distributed
-                .checked_add(share)
-                .ok_or(Error::InvalidAmount)?;
+            distributed = distributed.checked_add(share).ok_or(Error::InvalidAmount)?;
 
             if share <= 0 {
                 continue;
             }
 
-            client.transfer(&env.current_contract_address(), &destination.address, &share);
+            client.transfer(
+                &env.current_contract_address(),
+                &destination.address,
+                &share,
+            );
             events::emit_fee_collected(
                 env,
                 events::FeeCollected {
@@ -2441,16 +2440,18 @@ impl BountyEscrowContract {
         soroban_sdk::log!(&env, "transfer ok");
 
         // Resolve effective fee config (per-token takes precedence over global).
-        let (lock_fee_rate, _release_fee_rate, lock_fixed_fee, _release_fixed, fee_recipient, fee_enabled) =
-            Self::resolve_fee_config(&env);
+        let (
+            lock_fee_rate,
+            _release_fee_rate,
+            lock_fixed_fee,
+            _release_fixed,
+            fee_recipient,
+            fee_enabled,
+        ) = Self::resolve_fee_config(&env);
 
         // Deduct lock fee from the escrowed principal (percentage + fixed, capped at deposit).
-        let fee_amount = Self::combined_fee_amount(
-            amount,
-            lock_fee_rate,
-            lock_fixed_fee,
-            fee_enabled,
-        );
+        let fee_amount =
+            Self::combined_fee_amount(amount, lock_fee_rate, lock_fixed_fee, fee_enabled);
 
         // Net amount stored in escrow after fee.
         // Fee must never exceed the deposit; guard against misconfiguration.
@@ -2707,8 +2708,14 @@ impl BountyEscrowContract {
             return Err(Error::InsufficientFunds);
         }
         // 8. Fee computation (pure)
-        let (lock_fee_rate, _release_fee_rate, lock_fixed_fee, _release_fixed, _fee_recipient, fee_enabled) =
-            Self::resolve_fee_config(env);
+        let (
+            lock_fee_rate,
+            _release_fee_rate,
+            lock_fixed_fee,
+            _release_fixed,
+            _fee_recipient,
+            fee_enabled,
+        ) = Self::resolve_fee_config(env);
         let fee_amount =
             Self::combined_fee_amount(amount, lock_fee_rate, lock_fixed_fee, fee_enabled);
         let net_amount = amount.checked_sub(fee_amount).unwrap_or(amount);
@@ -2906,8 +2913,14 @@ impl BountyEscrowContract {
         }
 
         // Resolve effective fee config for release.
-        let (_lock_fee_rate, release_fee_rate, _lock_fixed, release_fixed_fee, fee_recipient, fee_enabled) =
-            Self::resolve_fee_config(&env);
+        let (
+            _lock_fee_rate,
+            release_fee_rate,
+            _lock_fixed,
+            release_fixed_fee,
+            fee_recipient,
+            fee_enabled,
+        ) = Self::resolve_fee_config(&env);
 
         let release_fee = Self::combined_fee_amount(
             escrow.amount,
@@ -3026,8 +3039,14 @@ impl BountyEscrowContract {
         if escrow.status != EscrowStatus::Locked {
             return Err(Error::FundsNotLocked);
         }
-        let (_lock_fee_rate, release_fee_rate, _lock_fixed, release_fixed_fee, _fee_recipient, fee_enabled) =
-            Self::resolve_fee_config(env);
+        let (
+            _lock_fee_rate,
+            release_fee_rate,
+            _lock_fixed,
+            release_fixed_fee,
+            _fee_recipient,
+            fee_enabled,
+        ) = Self::resolve_fee_config(env);
         let release_fee = Self::combined_fee_amount(
             escrow.amount,
             release_fee_rate,
@@ -4859,9 +4878,28 @@ impl BountyEscrowContract {
                 },
             );
 
+            Ok(locked_count)
+        })();
+
+        // Gas budget cap enforcement (test / testutils only).
+        #[cfg(any(test, feature = "testutils"))]
+        if result.is_ok() {
+            let gas_cfg = gas_budget::get_config(&env);
+            if let Err(e) = gas_budget::check(
+                &env,
+                symbol_short!("b_lock"),
+                &gas_cfg.batch_lock,
+                &gas_snapshot,
+                gas_cfg.enforce,
+            ) {
+                reentrancy_guard::release(&env);
+                return Err(e);
+            }
+        }
+
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
-        Ok(locked_count)
+        result
     }
 
     /// Alias for batch_lock_funds to match the requested naming convention.

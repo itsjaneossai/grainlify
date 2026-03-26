@@ -62,7 +62,14 @@ impl<'a> Setup<'a> {
         // interfere with gas measurements.
         client.set_whitelist(&depositor, &true);
 
-        Self { env, admin, depositor, contributor, client, token_id }
+        Self {
+            env,
+            admin,
+            depositor,
+            contributor,
+            client,
+            token_id,
+        }
     }
 
     fn mint(&self, amount: i128) {
@@ -189,13 +196,7 @@ fn test_gas_budget_admin_can_set_and_read_config() {
     let uncapped = gas_budget::OperationBudget::uncapped();
 
     s.client.set_gas_budget(
-        &lock_cap,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &true,
+        &lock_cap, &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &true,
     );
 
     let cfg = s.client.get_gas_budget();
@@ -215,13 +216,7 @@ fn test_gas_budget_non_admin_cannot_set_config() {
     // With mock_all_auths the call succeeds, but the recorded auth invocations
     // must include the admin address — proving require_auth(&admin) was called.
     s.client.set_gas_budget(
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &false,
+        &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &false,
     );
 
     // Verify the authorisation was requested for the admin address.
@@ -243,12 +238,9 @@ fn test_gas_budget_lock_cap_enforced() {
     s.set_lock_cap(1, true);
     s.env.budget().reset_unlimited();
 
-    let result = s.client.try_lock_funds(
-        &s.depositor.clone(),
-        &1,
-        &1_000,
-        &s.deadline(),
-    );
+    let result = s
+        .client
+        .try_lock_funds(&s.depositor.clone(), &1, &1_000, &s.deadline());
     assert_eq!(result, Err(Ok(Error::GasBudgetExceeded)));
 }
 
@@ -301,9 +293,7 @@ fn test_gas_budget_release_cap_enforced() {
     s.set_release_cap(1, true);
     s.env.budget().reset_unlimited();
 
-    let result = s
-        .client
-        .try_release_funds(&1, &s.contributor.clone());
+    let result = s.client.try_release_funds(&1, &s.contributor.clone());
     assert_eq!(result, Err(Ok(Error::GasBudgetExceeded)));
 }
 
@@ -454,13 +444,7 @@ fn test_gas_budget_config_can_be_updated() {
 
     // Second update: reset to uncapped, enforce = false.
     s.client.set_gas_budget(
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &uncapped,
-        &false,
+        &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &false,
     );
 
     let cfg2 = s.client.get_gas_budget();

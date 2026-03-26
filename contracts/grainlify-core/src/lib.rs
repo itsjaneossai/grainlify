@@ -511,9 +511,9 @@ mod monitoring {
 #[cfg(test)]
 mod test_core_monitoring;
 #[cfg(test)]
-mod test_serialization_compatibility;
-#[cfg(test)]
 mod test_pseudo_randomness;
+#[cfg(test)]
+mod test_serialization_compatibility;
 #[cfg(test)]
 mod test_version_helpers;
 
@@ -1275,14 +1275,16 @@ impl GrainlifyContract {
     /// All instance storage is preserved across the WASM replacement.
     pub fn execute_upgrade(env: Env, proposal_id: u64) {
         let start = env.ledger().timestamp();
+        let upgrade_op = Symbol::new(&env, "execute_upgrade");
+        let upgrade_exec = Symbol::new(&env, "upgrade_executed");
 
         // Security: Verify contract state is consistent before upgrade
         if !monitoring::verify_invariants(&env) {
             monitoring::track_operation(
-                &env, 
-                symbol_short!("execute_upgrade"), 
-                env.current_contract_address(), 
-                false
+                &env,
+                upgrade_op.clone(),
+                env.current_contract_address(),
+                false,
             );
             panic!("Contract state inconsistent - upgrade blocked");
         }
@@ -1290,16 +1292,17 @@ impl GrainlifyContract {
         // Verify proposal exists and has sufficient approvals
         if !MultiSig::can_execute(&env, proposal_id) {
             monitoring::track_operation(
-                &env, 
-                symbol_short!("execute_upgrade"), 
-                env.current_contract_address(), 
-                false
+                &env,
+                upgrade_op.clone(),
+                env.current_contract_address(),
+                false,
             );
             panic!("Threshold not met or proposal not executable");
         }
 
         let proposal =
             Self::load_upgrade_proposal(&env, proposal_id).expect("Missing upgrade proposal");
+        let wasm_hash = proposal.wasm_hash.clone();
 
         // Store previous version for rollback tracking
         let current_version = env.storage().instance().get(&DataKey::Version).unwrap_or(1);
@@ -1309,13 +1312,13 @@ impl GrainlifyContract {
 
         // Perform WASM upgrade — instance storage is preserved
         env.deployer()
-            .update_current_contract_wasm(proposal.wasm_hash.clone());
+            .update_current_contract_wasm(wasm_hash.clone());
 
         // Emit structured upgrade event for off-chain indexers
         env.events().publish(
             (symbol_short!("upgrade"), symbol_short!("wasm")),
             UpgradeEvent {
-                new_wasm_hash: proposal.wasm_hash,
+                new_wasm_hash: wasm_hash.clone(),
                 version: current_version,
                 timestamp: env.ledger().timestamp(),
             },
@@ -1326,21 +1329,19 @@ impl GrainlifyContract {
 
         // Track successful operation
         monitoring::track_operation(
-            &env, 
-            symbol_short!("execute_upgrade"), 
-            env.current_contract_address(), 
-            true
+            &env,
+            upgrade_op.clone(),
+            env.current_contract_address(),
+            true,
         );
 
         // Track performance
         let duration = env.ledger().timestamp().saturating_sub(start);
-        monitoring::emit_performance(&env, symbol_short!("execute_upgrade"), duration);
+        monitoring::emit_performance(&env, upgrade_op, duration);
 
         // Emit upgrade execution event
-        env.events().publish(
-            (symbol_short!("upgrade_executed"),),
-            (proposal_id, wasm_hash, current_version),
-        );
+        env.events()
+            .publish((upgrade_exec,), (proposal_id, wasm_hash, current_version));
     }
 
     fn load_upgrade_proposal(env: &Env, proposal_id: u64) -> Option<UpgradeProposalRecord> {

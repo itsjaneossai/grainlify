@@ -81,7 +81,8 @@ fn test_focused_amount_and_deadline_boundaries() {
     let ok_zero_fee = client.try_update_fee_config(&Some(0), &Some(0), &None, &None);
     assert!(ok_zero_fee.is_ok(), "zero fee rate should be allowed");
 
-    let ok_max_fee = client.try_update_fee_config(&Some(5_000), &Some(5_000), &None, &None, &None, &None);
+    let ok_max_fee =
+        client.try_update_fee_config(&Some(5_000), &Some(5_000), &None, &None, &None, &None);
     assert!(ok_max_fee.is_ok(), "MAX_FEE_RATE (5000) should be allowed");
 
     let err_over_max = client.try_update_fee_config(&Some(5_001), &None, &None, &None);
