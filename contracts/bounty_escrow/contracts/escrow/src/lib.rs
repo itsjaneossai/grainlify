@@ -664,6 +664,8 @@ pub struct Escrow {
     pub status: EscrowStatus,
     pub deadline: u64,
     pub refund_history: Vec<RefundRecord>,
+    pub archived: bool,
+    pub archived_at: Option<u64>,
 }
 
 /// Mutually exclusive participant filtering mode for lock_funds / batch_lock_funds.
@@ -706,6 +708,8 @@ pub struct AnonymousEscrow {
     pub status: EscrowStatus,
     pub deadline: u64,
     pub refund_history: Vec<RefundRecord>,
+    pub archived: bool,
+    pub archived_at: Option<u64>,
 }
 
 /// Depositor identity: either a concrete address (non-anon) or a 32-byte commitment (anon).
@@ -2263,6 +2267,8 @@ impl BountyEscrowContract {
             deadline,
             refund_history: vec![&env],
             remaining_amount: net_amount,
+            archived: false,
+            archived_at: None,
         };
         invariants::assert_escrow(&env, &escrow);
 
@@ -2343,6 +2349,71 @@ impl BountyEscrowContract {
     /// # Security
     /// This function performs only read operations. No storage writes, token transfers,
     /// or events are emitted.
+    pub fn archive_escrow(env: Env, bounty_id: u64) -> Result<(), Error> {
+        let admin = Self::require_admin(&env)?;
+        admin.require_auth();
+
+        let mut escrow = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Escrow>(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::EscrowNotFound)?;
+
+        escrow.archived = true;
+        escrow.archived_at = Some(env.ledger().timestamp());
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
+
+        // Also check anon escrow
+        if let Some(mut anon) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, AnonymousEscrow>(&DataKey::EscrowAnon(bounty_id))
+        {
+            anon.archived = true;
+            anon.archived_at = Some(env.ledger().timestamp());
+            env.storage()
+                .persistent()
+                .set(&DataKey::EscrowAnon(bounty_id), &anon);
+        }
+
+        events::emit_archived(&env, bounty_id, env.ledger().timestamp());
+        Ok(())
+    }
+
+    /// Get all archived escrow IDs.
+    pub fn get_archived_escrows(env: Env) -> Vec<u64> {
+        let index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EscrowIndex)
+            .unwrap_or(Vec::new(&env));
+        let mut archived = Vec::new(&env);
+        for id in index.iter() {
+            if let Some(escrow) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, Escrow>(&DataKey::Escrow(id))
+            {
+                if escrow.archived {
+                    archived.push_back(id);
+                }
+            } else if let Some(anon) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, AnonymousEscrow>(&DataKey::EscrowAnon(id))
+            {
+                if anon.archived {
+                    archived.push_back(id);
+                }
+            }
+        }
+        archived
+    }
+
+    /// Simulation of a lock operation.
     pub fn dry_run_lock(
         env: Env,
         depositor: Address,
@@ -2517,6 +2588,8 @@ impl BountyEscrowContract {
             status: EscrowStatus::Locked,
             deadline,
             refund_history: vec![&env],
+            archived: false,
+            archived_at: None,
         };
 
         env.storage()
@@ -4466,6 +4539,8 @@ impl BountyEscrowContract {
                     deadline: item.deadline,
                     refund_history: vec![&env],
                     remaining_amount: item.amount,
+                    archived: false,
+                    archived_at: None,
                 };
 
                 env.storage()
@@ -4527,6 +4602,11 @@ impl BountyEscrowContract {
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
         Ok(locked_count)
+    }
+
+    /// Alias for batch_lock_funds to match the requested naming convention.
+    pub fn batch_lock(env: Env, items: Vec<LockFundsItem>) -> Result<u32, Error> {
+        Self::batch_lock_funds(env, items)
     }
 
     /// Batch release funds to multiple contributors in a single atomic transaction.
@@ -4721,6 +4801,11 @@ impl BountyEscrowContract {
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
         result
+    }
+
+    /// Alias for batch_release_funds to match the requested naming convention.
+    pub fn batch_release(env: Env, items: Vec<ReleaseFundsItem>) -> Result<u32, Error> {
+        Self::batch_release_funds(env, items)
     }
     /// Update stored metadata for a bounty.
     ///
