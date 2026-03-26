@@ -3,6 +3,12 @@
 ## Overview
 This test suite validates that the bounty escrow contract properly handles race conditions and front-running scenarios where multiple parties attempt to perform operations on the same escrow simultaneously.
 
+## Race Assumptions
+- Soroban state transitions are atomic per transaction.
+- A "race" is represented by two or more transactions targeting the same `bounty_id` in close succession.
+- Ordering is transaction-order dependent: the first successful state transition is authoritative.
+- Security invariant: once escrow state moves out of `Locked`, later conflicting operations must fail and must not move funds.
+
 ## Test Scenarios
 
 ### 1. Release Races
@@ -68,13 +74,21 @@ Validates that only authorized claimants can claim:
 - Unauthorized parties cannot claim
 - Funds go only to authorized recipient
 
+### 8. Release vs Late Claim Authorization
+**Test**: `test_authorize_claim_after_release_fails_deterministically`
+
+Validates deterministic rejection when release wins first:
+- Release succeeds first and transitions escrow to `Released`
+- Later `authorize_claim` attempt fails with `FundsNotLocked`
+- No funds move to the late claimant
+
 ## Key Protections
 
 1. **Idempotency**: Operations that should only happen once (release, refund) properly reject duplicate attempts
 2. **State Consistency**: `remaining_amount` and status are always consistent
 3. **Atomicity**: Batch operations either fully succeed or fully fail
 4. **Authorization**: Only authorized parties can perform sensitive operations
-5. **First-Wins**: For competing operations, first transaction wins and subsequent ones fail gracefully
+5. **First-Wins**: For competing operations, first transaction wins and subsequent ones fail with deterministic errors
 
 ## Running Tests
 ```bash
@@ -82,4 +96,4 @@ cargo test test_front_running --lib
 ```
 
 ## Test Results
-All 8 tests pass, confirming proper handling of race conditions and front-running scenarios.
+All 9 tests pass, confirming proper handling of race conditions and front-running scenarios.

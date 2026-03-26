@@ -5,6 +5,14 @@ use soroban_sdk::{
     token, Address, Env,
 };
 
+/// Race-model tests for front-running-sensitive escrow actions.
+///
+/// # Assumptions
+/// - Soroban executes contract calls atomically within a transaction.
+/// - Contention is modeled as multiple transactions touching the same bounty in sequence.
+/// - Determinism requirement: once the first state transition succeeds, later conflicting
+///   transitions must fail with a stable error and must not move additional funds.
+
 fn create_token_contract<'a>(
     env: &Env,
     admin: &Address,
@@ -26,10 +34,10 @@ fn create_escrow_contract<'a>(env: &Env) -> BountyEscrowContractClient<'a> {
 
 struct TestSetup<'a> {
     env: Env,
-    admin: Address,
+    _admin: Address,
     depositor: Address,
     token: token::Client<'a>,
-    token_admin: token::StellarAssetClient<'a>,
+    _token_admin: token::StellarAssetClient<'a>,
     escrow: BountyEscrowContractClient<'a>,
 }
 
@@ -48,13 +56,26 @@ impl<'a> TestSetup<'a> {
 
         Self {
             env,
-            admin,
+            _admin: admin,
             depositor,
             token,
-            token_admin,
+            _token_admin: token_admin,
             escrow,
         }
     }
+}
+
+fn set_ledger_timestamp(env: &Env, timestamp: u64) {
+    env.ledger().set(LedgerInfo {
+        timestamp,
+        protocol_version: 20,
+        sequence_number: 0,
+        network_id: Default::default(),
+        base_reserve: 0,
+        min_temp_entry_ttl: 0,
+        min_persistent_entry_ttl: 0,
+        max_entry_ttl: 0,
+    });
 }
 
 #[test]
@@ -290,4 +311,29 @@ fn test_claim_race_unauthorized_fails() {
 
     let escrow = setup.escrow.get_escrow_info(&bounty_id);
     assert_eq!(escrow.status, EscrowStatus::Released);
+}
+
+#[test]
+fn test_authorize_claim_after_release_fails_deterministically() {
+    let setup = TestSetup::new();
+    let bounty_id = 9108_u64;
+    let amount = 44_000_i128;
+    let deadline = setup.env.ledger().timestamp() + 2_000;
+    let released_recipient = Address::generate(&setup.env);
+    let late_claimant = Address::generate(&setup.env);
+
+    setup
+        .escrow
+        .lock_funds(&setup.depositor, &bounty_id, &amount, &deadline);
+
+    setup.escrow.release_funds(&bounty_id, &released_recipient);
+
+    let late_authorize =
+        setup
+            .escrow
+            .try_authorize_claim(&bounty_id, &late_claimant, &DisputeReason::Other);
+
+    assert_eq!(late_authorize, Err(Ok(Error::FundsNotLocked)));
+    assert_eq!(setup.token.balance(&released_recipient), amount);
+    assert_eq!(setup.token.balance(&late_claimant), 0);
 }
