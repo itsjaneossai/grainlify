@@ -22,7 +22,7 @@ use soroban_sdk::{
 };
 
 use crate::{
-    ClaimRecord, ClaimStatus, DataKey, ProgramEscrowContract, ProgramEscrowContractClient,
+    ClaimStatus, ProgramEscrowContract, ProgramEscrowContractClient,
 };
 
 fn create_token_contract<'a>(

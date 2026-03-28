@@ -313,7 +313,7 @@ fn test_metadata_only_delegate_cannot_execute_release() {
         ],
     };
 
-    let updated = client.update_program_metadata(&program_id, &delegate, &metadata);
+    let updated = client.update_program_metadata_by(&delegate, &program_id, &metadata);
     assert_eq!(updated.metadata, metadata);
 
     assert!(client

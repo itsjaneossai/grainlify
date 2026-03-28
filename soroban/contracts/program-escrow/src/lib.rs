@@ -939,7 +939,9 @@ impl ProgramEscrowContract {
             restricted,
             allowed_labels: normalized.clone(),
         };
-        env.storage().persistent().set(&DataKey::LabelConfig, &config);
+        env.storage()
+            .persistent()
+            .set(&DataKey::LabelConfig, &config);
         env.events().publish(
             (LABEL_CONFIG_UPDATED,),
             LabelConfigUpdatedEvent {
@@ -1175,6 +1177,8 @@ impl ProgramEscrowContract {
 #[cfg(test)]
 mod test;
 #[cfg(test)]
-mod test_search;
-#[cfg(test)]
 mod test_full_lifecycle;
+#[cfg(test)]
+mod test_max_counts;
+#[cfg(test)]
+mod test_search;

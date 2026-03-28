@@ -373,13 +373,7 @@ fn test_lifecycle_with_labels() {
         String::from_str(&env, "q1"),
     ];
 
-    client.register_program_with_labels(
-        &program_id,
-        &program_admin,
-        &name,
-        &50_000,
-        &labels,
-    );
+    client.register_program_with_labels(&program_id, &program_admin, &name, &50_000, &labels);
 
     let program = client.get_program(&program_id);
     assert_eq!(program.labels.len(), 2);

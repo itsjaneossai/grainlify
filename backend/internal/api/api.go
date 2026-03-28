@@ -240,6 +240,12 @@ func New(cfg config.Config, deps Deps) *fiber.App {
 	adminGroup.Get("/users", auth.RequireRole("admin"), admin.ListUsers())
 	adminGroup.Put("/users/:id/role", auth.RequireRole("admin"), admin.SetUserRole())
 
+	// Scoped admin roles (per-program / per-escrow least-privilege access).
+	scopedAdmin := handlers.NewScopedAdminHandler(deps.DB)
+	adminGroup.Post("/scoped-roles", auth.RequireRole("admin"), scopedAdmin.Grant())
+	adminGroup.Delete("/scoped-roles", auth.RequireRole("admin"), scopedAdmin.Revoke())
+	adminGroup.Get("/scoped-roles", auth.RequireRole("admin"), scopedAdmin.List())
+
 	ecosystemsAdmin := handlers.NewEcosystemsAdminHandler(deps.DB)
 	adminGroup.Get("/ecosystems", auth.RequireRole("admin"), ecosystemsAdmin.List())
 	adminGroup.Get("/ecosystems/:id", auth.RequireRole("admin"), ecosystemsAdmin.GetByID())

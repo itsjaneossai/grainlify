@@ -158,6 +158,32 @@ fn test_mixed_pause_states() {
     assert!(!flags.refund_paused);
 }
 
+#[test]
+fn test_batch_lock_funds_while_paused_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    let (token_client, token_admin_client) = create_token_contract(&env, &token_admin);
+    let (escrow_client, _) = create_escrow_contract(&env);
+
+    escrow_client.init(&admin, &token_client.address);
+    token_admin_client.mint(&depositor, &1000);
+
+    // Pause locks
+    escrow_client.set_paused(&Some(true), &None, &None, &None);
+
+    let deadline = env.ledger().timestamp() + 1000;
+    let items = soroban_sdk::vec![
+        &env,
+        LockFundsItem {
+            bounty_id: 1,
+            amount: 100,
+            depositor: depositor.clone(),
+            deadline,
         },
         LockFundsItem {
             bounty_id: 2,

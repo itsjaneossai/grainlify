@@ -2,6 +2,7 @@ extern crate std;
 
 use soroban_sdk::{
     xdr::{FromXdr, Hash, ScAddress, ToXdr},
+    testutils::Address as _,
     Address, Env, IntoVal, String as SdkString, Symbol, TryFromVal, Val,
 };
 

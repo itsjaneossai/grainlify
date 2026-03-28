@@ -107,6 +107,58 @@ Valid payout paths are mutually exclusive: admin `release_funds` moves escrow to
 
 ---
 
+## Timelock Policy
+
+The escrow contract implements an optional timelock mechanism for sensitive admin actions to protect against compromised admin keys. When enabled, admin actions must go through a propose-and-execute flow with a configurable delay.
+
+### Two-Step Flow
+
+1. **Propose** - Admin calls `propose_admin_action` with the desired action and parameters
+2. **Execute** - After the delay elapses, anyone can call `execute_after_delay` to apply the change
+
+### ASCII Timeline
+
+```
+T=0        T=0+delay         T=0+delay+ε
+|  PROPOSE  |  EXECUTABLE    |  EXECUTE
+|-----------|----------------|---------->
+             ↑ earliest execution point
+```
+
+### Configuration
+
+| Parameter | Minimum | Default | Maximum | Description |
+|-----------|---------|---------|---------|-------------|
+| `delay` | 3,600 seconds (1 hour) | 86,400 seconds (24 hours) | 2,592,000 seconds (30 days) | Time before action becomes executable |
+| `is_enabled` | false | false | true | Whether timelock is active |
+
+### Protected Actions
+
+When timelock is enabled, these admin functions are blocked and must use the propose flow:
+- `update_fee_config` → `ActionType::ChangeFeeRecipient`
+- `set_paused` → `ActionType::SetPaused`
+- `set_deprecated` → `ActionType::EnableKillSwitch` / `DisableKillSwitch`
+- `set_maintenance_mode` → `ActionType::SetMaintenanceMode`
+
+### Emergency Cancellation
+
+Admin can cancel any pending action at any time before execution using `cancel_admin_action`.
+
+### Public Visibility
+
+All pending actions are publicly visible via:
+- `get_pending_actions()` - Returns all pending actions ordered by proposal time
+- `get_action(action_id)` - Returns details of a specific action
+
+### Design Notes
+
+- `configure_timelock` bypasses the timelock (bootstrap problem)
+- When timelock is disabled, all existing admin functions work normally
+- Execution is permissionless - any address can execute after the delay
+- Tests: `contracts/escrow/src/test_timelock.rs`
+
+---
+
 # Soroban Project
 
 ## Project Structure

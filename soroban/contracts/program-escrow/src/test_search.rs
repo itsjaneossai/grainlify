@@ -540,8 +540,14 @@ fn test_search_includes_jurisdiction_enabled_programs() {
 #[test]
 fn test_get_programs_by_label_filters_results() {
     setup_search!(
-        env, client, _contract_id, _admin, program_admin,
-        _token_client, _token_admin, 100_000i128
+        env,
+        client,
+        _contract_id,
+        _admin,
+        program_admin,
+        _token_client,
+        _token_admin,
+        100_000i128
     );
 
     let payroll = vec![
@@ -549,10 +555,7 @@ fn test_get_programs_by_label_filters_results() {
         String::from_str(&env, "payroll"),
         String::from_str(&env, "grant-2024"),
     ];
-    let milestone = vec![
-        &env,
-        String::from_str(&env, "milestone-1"),
-    ];
+    let milestone = vec![&env, String::from_str(&env, "milestone-1")];
 
     client.register_program_with_labels(
         &1,
@@ -585,8 +588,14 @@ fn test_get_programs_by_label_filters_results() {
 #[test]
 fn test_update_program_labels_by_program_admin() {
     setup_search!(
-        env, client, _contract_id, contract_admin, program_admin,
-        _token_client, token_admin, 100_000i128
+        env,
+        client,
+        _contract_id,
+        contract_admin,
+        program_admin,
+        _token_client,
+        token_admin,
+        100_000i128
     );
 
     client.register_program(
@@ -604,13 +613,20 @@ fn test_update_program_labels_by_program_admin() {
     let updated = client.update_program_labels(&program_admin, &9, &labels);
 
     assert_eq!(updated.labels.len(), 2);
-    assert_eq!(updated.labels.get(0).unwrap(), String::from_str(&env, "grant-2024"));
+    assert_eq!(
+        updated.labels.get(0).unwrap(),
+        String::from_str(&env, "grant-2024")
+    );
     assert_eq!(client.get_program(&9).labels.len(), 2);
 
     let admin_update = vec![&env, String::from_str(&env, "payroll")];
-    let updated_by_contract_admin = client.update_program_labels(&contract_admin, &9, &admin_update);
+    let updated_by_contract_admin =
+        client.update_program_labels(&contract_admin, &9, &admin_update);
     assert_eq!(updated_by_contract_admin.labels.len(), 1);
-    assert_eq!(updated_by_contract_admin.labels.get(0).unwrap(), String::from_str(&env, "payroll"));
+    assert_eq!(
+        updated_by_contract_admin.labels.get(0).unwrap(),
+        String::from_str(&env, "payroll")
+    );
 
     let outsider = Address::generate(&env);
     token_admin.mint(&outsider, &1_000);
@@ -621,8 +637,14 @@ fn test_update_program_labels_by_program_admin() {
 #[test]
 fn test_restricted_label_config_is_enforced() {
     setup_search!(
-        env, client, _contract_id, contract_admin, program_admin,
-        _token_client, _token_admin, 100_000i128
+        env,
+        client,
+        _contract_id,
+        contract_admin,
+        program_admin,
+        _token_client,
+        _token_admin,
+        100_000i128
     );
 
     let allowed = vec![
@@ -655,6 +677,12 @@ fn test_restricted_label_config_is_enforced() {
 
     let fetched = client.get_label_config();
     assert_eq!(fetched.allowed_labels.len(), 2);
-    assert_eq!(fetched.allowed_labels.get(0).unwrap(), String::from_str(&env, "payroll"));
-    assert_eq!(client.get_program(&20).labels.get(0).unwrap(), String::from_str(&env, "payroll"));
+    assert_eq!(
+        fetched.allowed_labels.get(0).unwrap(),
+        String::from_str(&env, "payroll")
+    );
+    assert_eq!(
+        client.get_program(&20).labels.get(0).unwrap(),
+        String::from_str(&env, "payroll")
+    );
 }

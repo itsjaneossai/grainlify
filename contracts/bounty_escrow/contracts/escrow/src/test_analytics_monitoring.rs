@@ -106,6 +106,24 @@ fn test_aggregate_stats_initial_state_is_zeroed() {
     assert_eq!(stats.count_released, 0);
     assert_eq!(stats.count_refunded, 0);
 }
+#[test]
+fn test_query_pagination_boundary() {
+    let setup = TestEnv::new(); // Assuming your existing test helper
+        let (admin, depositor) = (setup.admin, setup.depositor);
+
+    // Create 3 escrows
+        for i in 1..=3 {
+	        setup.client.lock_funds(&depositor, &i, &1000, &2000);
+		    }
+
+    // Offset 1, Limit 1 should return exactly the 2nd escrow created
+        let results = setup.client.query_escrows_by_status(&EscrowStatus::Locked, &1, &1);
+	    assert_eq!(results.len(), 1);
+
+    // Offset 3 (out of bounds) should return empty vector, not panic
+        let oob_results = setup.client.query_escrows_by_status(&EscrowStatus::Locked, &3, &1);
+	    assert_eq!(oob_results.len(), 0);
+	    }
 
 #[test]
 fn test_aggregate_stats_reflects_single_lock() {

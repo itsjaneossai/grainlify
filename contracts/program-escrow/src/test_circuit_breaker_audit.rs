@@ -183,7 +183,6 @@ mod test {
         client.reset_circuit_breaker(&admin);
 
         let circuit_events = env.events().all();
-        // Check for cb_reset event
         let mut found = false;
         for ev in circuit_events.iter() {
             if ev.1.len() >= 2
@@ -196,7 +195,7 @@ mod test {
                 break;
             }
         }
-        assert!(found, "cb_reset event not found");
+        assert!(found, "no events emitted after reset");
     }
 
     #[test]
