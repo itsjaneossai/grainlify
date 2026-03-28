@@ -61,7 +61,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             contracts/bounty_escrow/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/bounty_escrow/**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/bounty_escrow/**/Cargo.lock', 'contracts/bounty_escrow/contracts/escrow/src/**', 'contracts/grainlify-core/src/**') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 

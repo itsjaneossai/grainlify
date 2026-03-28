@@ -108,9 +108,7 @@ fn test_propose_admin_action_immediate_execution_when_disabled() {
     // Propose admin change - should execute immediately
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin.clone(),
-        },
+        &ActionPayload::ChangeAdmin(new_admin.clone()),
     );
 
     // Should return 0 to signal immediate execution
@@ -148,9 +146,7 @@ fn test_propose_admin_action_creates_pending_when_enabled() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin.clone(),
-        },
+        &ActionPayload::ChangeAdmin(new_admin.clone()),
     );
 
     // Should return a non-zero action ID
@@ -192,7 +188,7 @@ fn test_execute_before_delay_reverts() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin { new_admin },
+        &ActionPayload::ChangeAdmin(new_admin),
     );
 
     // Try to execute immediately (before delay)
@@ -222,9 +218,7 @@ fn test_execute_at_exact_delay_succeeds() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin.clone(),
-        },
+        &ActionPayload::ChangeAdmin(new_admin.clone()),
     );
 
     // Advance time exactly to the execute_after timestamp
@@ -265,9 +259,7 @@ fn test_execute_after_delay_succeeds() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin.clone(),
-        },
+        &ActionPayload::ChangeAdmin(new_admin.clone()),
     );
 
     // Advance time past the delay
@@ -309,7 +301,7 @@ fn test_execute_already_executed_reverts() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin { new_admin },
+        &ActionPayload::ChangeAdmin(new_admin),
     );
 
     // Advance time and execute
@@ -340,7 +332,7 @@ fn test_cancel_pending_action() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin { new_admin },
+        &ActionPayload::ChangeAdmin(new_admin),
     );
 
     // Cancel the action
@@ -376,7 +368,7 @@ fn test_execute_cancelled_action_reverts() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin { new_admin },
+        &ActionPayload::ChangeAdmin(new_admin),
     );
 
     // Cancel the action
@@ -409,7 +401,7 @@ fn test_cancel_executed_action_reverts() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin { new_admin },
+        &ActionPayload::ChangeAdmin(new_admin),
     );
 
     // Execute the action
@@ -442,7 +434,7 @@ fn test_only_admin_can_cancel() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin { new_admin },
+        &ActionPayload::ChangeAdmin(new_admin),
     );
 
     // Try to cancel as non-admin
@@ -473,9 +465,7 @@ fn test_non_admin_can_execute_after_delay() {
     // Propose admin change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin.clone(),
-        },
+        &ActionPayload::ChangeAdmin(new_admin.clone()),
     );
 
     // Advance time and execute as different address
@@ -553,9 +543,7 @@ fn test_get_pending_actions_ordered_by_time() {
     // Propose first action
     let action_id1 = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin1,
-        },
+        &ActionPayload::ChangeAdmin(new_admin1),
     );
 
     // Advance time a bit
@@ -564,9 +552,7 @@ fn test_get_pending_actions_ordered_by_time() {
     // Propose second action
     let action_id2 = client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeAdmin {
-            new_admin: new_admin2,
-        },
+        &ActionPayload::ChangeAdmin(new_admin2),
     );
 
     // Get pending actions
@@ -601,9 +587,7 @@ fn test_change_fee_recipient_via_timelock() {
     // Propose fee recipient change
     let action_id = client.propose_admin_action(
         &ActionType::ChangeFeeRecipient,
-        &ActionPayload::ChangeFeeRecipient {
-            new_recipient: new_recipient.clone(),
-        },
+        &ActionPayload::ChangeFeeRecipient(new_recipient.clone()),
     );
 
     // Advance time and execute
@@ -636,7 +620,7 @@ fn test_enable_kill_switch_via_timelock() {
     // Propose kill switch enable
     let action_id = client.propose_admin_action(
         &ActionType::EnableKillSwitch,
-        &ActionPayload::EnableKillSwitch {},
+        &ActionPayload::EnableKillSwitch,
     );
 
     // Advance time and execute
@@ -669,11 +653,7 @@ fn test_set_paused_via_timelock() {
     // Propose pause state change
     let action_id = client.propose_admin_action(
         &ActionType::SetPaused,
-        &ActionPayload::SetPaused {
-            lock: Some(true),
-            release: Some(false),
-            refund: Some(false),
-        },
+        &ActionPayload::SetPaused(Some(true), Some(false), Some(false)),
     );
 
     // Advance time and execute
@@ -708,8 +688,6 @@ fn test_invalid_payload_rejected() {
     // Try to propose with mismatched payload
     client.propose_admin_action(
         &ActionType::ChangeAdmin,
-        &ActionPayload::ChangeFeeRecipient {
-            new_recipient: new_admin,
-        }, // Wrong payload type
+        &ActionPayload::ChangeFeeRecipient(new_admin), // Wrong payload type
     );
 }

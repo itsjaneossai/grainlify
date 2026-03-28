@@ -39,7 +39,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             contracts/grainlify-core/target/
-          key: ${{ runner.os }}-cargo-grainlify-core-${{ hashFiles('contracts/grainlify-core/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-grainlify-core-${{ hashFiles('contracts/grainlify-core/Cargo.lock', 'contracts/grainlify-core/src/**') }}
           restore-keys: |
             ${{ runner.os }}-cargo-grainlify-core-
 
@@ -96,7 +96,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             contracts/bounty_escrow/target/
-          key: ${{ runner.os }}-cargo-bounty-escrow-${{ hashFiles('contracts/bounty_escrow/**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-bounty-escrow-${{ hashFiles('contracts/bounty_escrow/**/Cargo.lock', 'contracts/bounty_escrow/contracts/escrow/src/**', 'contracts/grainlify-core/src/**') }}
           restore-keys: |
             ${{ runner.os }}-cargo-bounty-escrow-
 
@@ -104,7 +104,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: contracts/bounty_escrow/contracts/escrow/target
-          key: ${{ runner.os }}-target-bounty-escrow-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-target-bounty-escrow-${{ hashFiles('**/Cargo.lock', 'contracts/bounty_escrow/contracts/escrow/src/**', 'contracts/grainlify-core/src/**') }}
           restore-keys: |
             ${{ runner.os }}-target-bounty-escrow-
 
@@ -161,7 +161,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             contracts/program-escrow/target/
-          key: ${{ runner.os }}-cargo-program-escrow-${{ hashFiles('contracts/program-escrow/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-program-escrow-${{ hashFiles('contracts/program-escrow/Cargo.lock', 'contracts/program-escrow/src/**', 'contracts/grainlify-core/src/**') }}
           restore-keys: |
             ${{ runner.os }}-cargo-program-escrow-
 
@@ -169,7 +169,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: contracts/program-escrow/target
-          key: ${{ runner.os }}-target-program-escrow-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-target-program-escrow-${{ hashFiles('**/Cargo.lock', 'contracts/program-escrow/src/**', 'contracts/grainlify-core/src/**') }}
           restore-keys: |
             ${{ runner.os }}-target-program-escrow-
 

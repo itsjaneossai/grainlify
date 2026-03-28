@@ -31,7 +31,7 @@ This document describes the optional anonymization and pseudonymization of on-ch
 ### 4. Refund and resolution
 
 - **Normal escrow**: `refund(bounty_id)` sends funds back to the stored depositor address.
-- **Anonymous escrow**: `refund(bounty_id)` returns `AnonymousRefundRequiresResolution`. Refund is only possible via:
+- **Anonymous escrow**: `refund(bounty_id)` returns `AnonymousRefundNeedsResolver`. Refund is only possible via:
   - **`refund_resolved(env, bounty_id, recipient)`**
     - Callable only by the configured **anonymous resolver** (admin sets it with `set_anonymous_resolver`).
     - Resolver is expected to resolve the commitment off-chain (e.g. backend lookup or ZK proof) and pass the true `recipient` address.
@@ -62,7 +62,7 @@ This document describes the optional anonymization and pseudonymization of on-ch
 
 ## Errors
 
-- `AnonymousRefundRequiresResolution`: Refund was attempted with `refund(bounty_id)` on an anonymous escrow; use `refund_resolved(bounty_id, recipient)` with resolver auth.
+- `AnonymousRefundNeedsResolver`: Refund was attempted with `refund(bounty_id)` on an anonymous escrow; use `refund_resolved(bounty_id, recipient)` with resolver auth.
 - `NotAnonymousResolver`: Caller is not the configured anonymous resolver.
 - `NotAnonymousEscrow`: `refund_resolved` was called for a non-anonymous bounty (use `refund` instead).
 - `AnonymousResolverNotSet`: No resolver configured; cannot call `refund_resolved`.

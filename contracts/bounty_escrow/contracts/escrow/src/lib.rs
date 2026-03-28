@@ -1,3 +1,5 @@
+#![no_std]
+
 pub mod events;
 pub mod gas_budget;
 pub mod invariants;
@@ -31,16 +33,19 @@ mod test_reentrancy_guard;
 mod test_timelock;
 
 use crate::events::{
+    emit_admin_action_cancelled, emit_admin_action_executed, emit_admin_action_proposed,
     emit_batch_funds_locked, emit_batch_funds_released, emit_bounty_initialized,
     emit_deprecation_state_changed, emit_deterministic_selection, emit_funds_locked,
     emit_funds_locked_anon, emit_funds_refunded, emit_funds_released,
     emit_maintenance_mode_changed, emit_notification_preferences_updated,
     emit_participant_filter_mode_changed, emit_risk_flags_updated, emit_ticket_claimed,
-    emit_ticket_issued, BatchFundsLocked, BatchFundsReleased, BountyEscrowInitialized,
+    emit_ticket_issued, emit_timelock_configured, AdminActionCancelled, AdminActionExecuted,
+    AdminActionProposed, BatchFundsLocked, BatchFundsReleased, BountyEscrowInitialized,
     ClaimCancelled, ClaimCreated, ClaimExecuted, CriticalOperationOutcome, DeprecationStateChanged,
     DeterministicSelectionDerived, FundsLocked, FundsLockedAnon, FundsRefunded, FundsReleased,
     MaintenanceModeChanged, NotificationPreferencesUpdated, ParticipantFilterModeChanged,
-    RefundTriggerType, RiskFlagsUpdated, TicketClaimed, TicketIssued, EVENT_VERSION_V2,
+    RefundTriggerType, RiskFlagsUpdated, TicketClaimed, TicketIssued, TimelockConfigured,
+    EVENT_VERSION_V2,
 };
 use soroban_sdk::xdr::{FromXdr, ToXdr};
 use soroban_sdk::{
@@ -588,22 +593,12 @@ pub enum ActionStatus {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ActionPayload {
-    ChangeAdmin {
-        new_admin: Address,
-    },
-    ChangeFeeRecipient {
-        new_recipient: Address,
-    },
-    EnableKillSwitch {},
-    DisableKillSwitch {},
-    SetMaintenanceMode {
-        enabled: bool,
-    },
-    SetPaused {
-        lock: Option<bool>,
-        release: Option<bool>,
-        refund: Option<bool>,
-    },
+    ChangeAdmin(Address),
+    ChangeFeeRecipient(Address),
+    EnableKillSwitch,
+    DisableKillSwitch,
+    SetMaintenanceMode(bool),
+    SetPaused(Option<bool>, Option<bool>, Option<bool>),
 }
 
 /// A pending admin action awaiting execution
@@ -627,7 +622,6 @@ pub struct TimelockConfig {
     pub is_enabled: bool,
 }
 
-use grainlify_core::errors;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -681,7 +675,7 @@ pub enum Error {
     /// Returned when participant filtering is allowlist-only and the address is not allowlisted
     ParticipantNotAllowed = 36,
     /// Refund for anonymous escrow must go through refund_resolved (resolver provides recipient)
-    AnonymousRefundRequiresResolution = 39,
+    AnonymousRefundNeedsResolver = 39,
     /// Anonymous resolver address not set in instance storage
     AnonymousResolverNotSet = 40,
     /// Bounty exists but is not an anonymous escrow (for refund_resolved)
@@ -1226,7 +1220,7 @@ impl BountyEscrowContract {
             let id = index.get(i).unwrap();
 
             // Reusing your existing get_escrow_info logic
-            let info = Self::get_escrow_info(env.clone(), id);
+            let info = Self::load_escrow_info(&env, id);
             if info.status == status {
                 results.push_back(info);
             }
@@ -1254,7 +1248,7 @@ impl BountyEscrowContract {
                 break;
             }
             let id = index.get(i).unwrap();
-            let info = Self::get_escrow_info(env.clone(), id);
+            let info = Self::load_escrow_info(&env, id);
 
             if info.amount >= min && info.amount <= max {
                 results.push_back(info);
@@ -1283,7 +1277,7 @@ impl BountyEscrowContract {
                 break;
             }
             let id = index.get(i).unwrap();
-            let info = Self::get_escrow_info(env.clone(), id);
+            let info = Self::load_escrow_info(&env, id);
 
             if info.deadline >= min_ts && info.deadline <= max_ts {
                 results.push_back(info);
@@ -2482,8 +2476,6 @@ impl BountyEscrowContract {
             }
         }
 
-        // Sort by proposed_at (earliest first)
-        pending.sort(|a, b| a.proposed_at.cmp(&b.proposed_at));
         pending
     }
 
@@ -2517,14 +2509,14 @@ impl BountyEscrowContract {
         payload: &ActionPayload,
     ) -> Result<(), Error> {
         match (action_type, payload) {
-            (ActionType::ChangeAdmin, ActionPayload::ChangeAdmin { .. }) => Ok(()),
-            (ActionType::ChangeFeeRecipient, ActionPayload::ChangeFeeRecipient { .. }) => Ok(()),
-            (ActionType::EnableKillSwitch, ActionPayload::EnableKillSwitch {}) => Ok(()),
-            (ActionType::DisableKillSwitch, ActionPayload::DisableKillSwitch {}) => Ok(()),
-            (ActionType::SetMaintenanceMode, ActionPayload::SetMaintenanceMode { .. }) => Ok(()),
-            (ActionType::UnsetMaintenanceMode, ActionPayload::SetMaintenanceMode { .. }) => Ok(()),
-            (ActionType::SetPaused, ActionPayload::SetPaused { .. }) => Ok(()),
-            (ActionType::UnsetPaused, ActionPayload::SetPaused { .. }) => Ok(()),
+            (ActionType::ChangeAdmin, ActionPayload::ChangeAdmin(..)) => Ok(()),
+            (ActionType::ChangeFeeRecipient, ActionPayload::ChangeFeeRecipient(..)) => Ok(()),
+            (ActionType::EnableKillSwitch, ActionPayload::EnableKillSwitch) => Ok(()),
+            (ActionType::DisableKillSwitch, ActionPayload::DisableKillSwitch) => Ok(()),
+            (ActionType::SetMaintenanceMode, ActionPayload::SetMaintenanceMode(..)) => Ok(()),
+            (ActionType::UnsetMaintenanceMode, ActionPayload::SetMaintenanceMode(..)) => Ok(()),
+            (ActionType::SetPaused, ActionPayload::SetPaused(..)) => Ok(()),
+            (ActionType::UnsetPaused, ActionPayload::SetPaused(..)) => Ok(()),
             _ => Err(Error::InvalidPayload),
         }
     }
@@ -2532,20 +2524,50 @@ impl BountyEscrowContract {
     /// Execute an admin action (bypasses all auth checks)
     fn execute_action(env: Env, payload: ActionPayload) -> Result<(), Error> {
         match payload {
-            ActionPayload::ChangeAdmin { new_admin } => Self::_execute_change_admin(env, new_admin),
-            ActionPayload::ChangeFeeRecipient { new_recipient } => {
+            ActionPayload::ChangeAdmin(new_admin) => Self::_execute_change_admin(env, new_admin),
+            ActionPayload::ChangeFeeRecipient(new_recipient) => {
                 Self::_execute_change_fee_recipient(env, new_recipient)
             }
-            ActionPayload::EnableKillSwitch {} => Self::_execute_set_deprecated(env, true, None),
-            ActionPayload::DisableKillSwitch {} => Self::_execute_set_deprecated(env, false, None),
-            ActionPayload::SetMaintenanceMode { enabled } => {
+            ActionPayload::EnableKillSwitch => Self::_execute_set_deprecated(env, true, None),
+            ActionPayload::DisableKillSwitch => Self::_execute_set_deprecated(env, false, None),
+            ActionPayload::SetMaintenanceMode(enabled) => {
                 Self::_execute_set_maintenance_mode(env, enabled)
             }
-            ActionPayload::SetPaused {
-                lock,
-                release,
-                refund,
-            } => Self::_execute_set_paused(env, lock, release, refund, None),
+            ActionPayload::SetPaused(lock, release, refund) => {
+                Self::_execute_set_paused(env, lock, release, refund, None)
+            }
+        }
+    }
+
+    fn load_escrow_info(env: &Env, bounty_id: u64) -> EscrowInfo {
+        if let Some(escrow) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Escrow>(&DataKey::Escrow(bounty_id))
+        {
+            EscrowInfo {
+                depositor: AnonymousParty::Address(escrow.depositor),
+                amount: escrow.amount,
+                remaining_amount: escrow.remaining_amount,
+                status: escrow.status,
+                deadline: escrow.deadline,
+                refund_history: escrow.refund_history,
+            }
+        } else if let Some(anon) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, AnonymousEscrow>(&DataKey::EscrowAnon(bounty_id))
+        {
+            EscrowInfo {
+                depositor: AnonymousParty::Commitment(anon.depositor_commitment),
+                amount: anon.amount,
+                remaining_amount: anon.remaining_amount,
+                status: anon.status,
+                deadline: anon.deadline,
+                refund_history: anon.refund_history,
+            }
+        } else {
+            panic!("bounty not found")
         }
     }
 

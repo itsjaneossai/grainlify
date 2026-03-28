@@ -29,8 +29,8 @@
 //!   (Checks-Effects-Interactions ordering) so they accurately reflect final
 //!   on-chain state.
 //! * No PII, KYC data, or private keys are ever emitted.
-//! * All `symbol_short!` strings are ≤ 8 bytes — Soroban silently truncates
-//!   longer strings, which would corrupt topic-based filtering.
+//! * All `symbol_short!` strings are ≤ 9 bytes — Soroban rejects longer values,
+//!   which would corrupt topic-based filtering.
 use crate::CapabilityAction;
 use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, Symbol};
 
@@ -1102,7 +1102,7 @@ pub struct TimelockConfigured {
 
 /// Emit [`TimelockConfigured`].
 pub fn emit_timelock_configured(env: &Env, event: TimelockConfigured) {
-    let topics = (symbol_short!("timelock_cfg"),);
+    let topics = (symbol_short!("tmlk_cfg"),);
     env.events().publish(topics, event);
 }
 
@@ -1113,7 +1113,7 @@ pub fn emit_timelock_configured(env: &Env, event: TimelockConfigured) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"action_proposed"` |
+/// | 0 | `"act_prop"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1136,7 +1136,7 @@ pub struct AdminActionProposed {
 
 /// Emit [`AdminActionProposed`].
 pub fn emit_admin_action_proposed(env: &Env, event: AdminActionProposed) {
-    let topics = (symbol_short!("action_proposed"),);
+    let topics = (symbol_short!("act_prop"),);
     env.events().publish(topics, event);
 }
 
@@ -1147,7 +1147,7 @@ pub fn emit_admin_action_proposed(env: &Env, event: AdminActionProposed) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"action_executed"` |
+/// | 0 | `"act_exec"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1168,7 +1168,7 @@ pub struct AdminActionExecuted {
 
 /// Emit [`AdminActionExecuted`].
 pub fn emit_admin_action_executed(env: &Env, event: AdminActionExecuted) {
-    let topics = (symbol_short!("action_executed"),);
+    let topics = (symbol_short!("act_exec"),);
     env.events().publish(topics, event);
 }
 
@@ -1179,7 +1179,7 @@ pub fn emit_admin_action_executed(env: &Env, event: AdminActionExecuted) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"action_cancelled"` |
+/// | 0 | `"act_cncl"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1200,6 +1200,6 @@ pub struct AdminActionCancelled {
 
 /// Emit [`AdminActionCancelled`].
 pub fn emit_admin_action_cancelled(env: &Env, event: AdminActionCancelled) {
-    let topics = (symbol_short!("action_cancelled"),);
+    let topics = (symbol_short!("act_cncl"),);
     env.events().publish(topics, event);
 }

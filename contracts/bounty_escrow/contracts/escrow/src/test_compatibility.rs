@@ -86,7 +86,7 @@ fn test_all_error_codes_stable() {
     assert_eq!(Error::ParticipantNotAllowed as u32, 36);
     assert_eq!(Error::UseGetEscrowInfoV2ForAnonymous as u32, 37);
     // 38 intentionally unassigned
-    assert_eq!(Error::AnonymousRefundRequiresResolution as u32, 39);
+    assert_eq!(Error::AnonymousRefundNeedsResolver as u32, 39);
     assert_eq!(Error::AnonymousResolverNotSet as u32, 40);
     // 41 intentionally unassigned
     assert_eq!(Error::InvalidSelectionInput as u32, 42);

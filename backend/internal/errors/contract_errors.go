@@ -82,7 +82,7 @@ var unifiedErrors = map[uint32]contractErrorEntry{
 	219: {"InvalidSelectionInput", "Input for deterministic selection is invalid"},
 	220: {"UpgradeSafetyCheckFailed", "Upgrade safety check failed"},
 	221: {"BountyAlreadyInitialized", "Bounty escrow contract is already initialized"},
-	222: {"AnonymousRefundRequiresResolution", "Refund for anonymous escrow requires resolution"},
+	222: {"AnonymousRefundNeedsResolver", "Refund for anonymous escrow requires resolution"},
 	223: {"AnonymousResolverNotSet", "Anonymous resolver address not set"},
 	224: {"NotAnonymousEscrowVariant", "Escrow type mismatch: expected anonymous variant"},
 	225: {"UseGetEscrowInfoV2ForAnonymous", "Please use get_escrow_info_v2 for anonymous escrows"},
