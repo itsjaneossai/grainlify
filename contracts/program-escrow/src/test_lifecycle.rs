@@ -275,12 +275,7 @@ fn test_delegate_with_release_permission_can_single_payout_by() {
     let recipient = Address::generate(&env);
     let program_id = String::from_str(&env, "hack-2026");
 
-    client.set_program_delegate(
-        &program_id,
-        &admin,
-        &delegate,
-        &DELEGATE_PERMISSION_RELEASE,
-    );
+    client.set_program_delegate(&program_id, &admin, &delegate, &DELEGATE_PERMISSION_RELEASE);
 
     let updated = client.single_payout_by(&delegate, &recipient, &1_250);
     assert_eq!(updated.remaining_balance, 3_750);
@@ -309,7 +304,13 @@ fn test_metadata_only_delegate_cannot_execute_release() {
         tags: vec![&env, String::from_str(&env, "delegate")],
         start_date: Some(1),
         end_date: Some(2),
-        custom_fields: vec![&env, (String::from_str(&env, "track"), String::from_str(&env, "infra"))],
+        custom_fields: vec![
+            &env,
+            (
+                String::from_str(&env, "track"),
+                String::from_str(&env, "infra"),
+            ),
+        ],
     };
 
     let updated = client.update_program_metadata(&program_id, &delegate, &metadata);
@@ -328,12 +329,7 @@ fn test_revoked_delegate_cannot_release_program_funds() {
     let recipient = Address::generate(&env);
     let program_id = String::from_str(&env, "hack-2026");
 
-    client.set_program_delegate(
-        &program_id,
-        &admin,
-        &delegate,
-        &DELEGATE_PERMISSION_RELEASE,
-    );
+    client.set_program_delegate(&program_id, &admin, &delegate, &DELEGATE_PERMISSION_RELEASE);
     client.revoke_program_delegate(&program_id, &admin);
 
     assert!(client
@@ -1646,7 +1642,14 @@ fn test_lock_program_funds_fee_recipient_different_from_admin() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    client.update_fee_config(&Some(200), &None, &None, &None, &Some(fee_recipient.clone()), &Some(true));
+    client.update_fee_config(
+        &Some(200),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &Some(true),
+    );
 
     let data = client.lock_program_funds(&100_000);
     assert_eq!(data.remaining_balance, 98_000);

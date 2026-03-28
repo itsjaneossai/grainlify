@@ -12,7 +12,10 @@ use soroban_sdk::{
     token, Address, Env, String,
 };
 
-fn setup(env: &Env, initial_lock: i128) -> (ProgramEscrowContractClient<'static>, Address, Address) {
+fn setup(
+    env: &Env,
+    initial_lock: i128,
+) -> (ProgramEscrowContractClient<'static>, Address, Address) {
     env.mock_all_auths();
     let contract_id = env.register_contract(None, ProgramEscrowContract);
     let client = ProgramEscrowContractClient::new(env, &contract_id);
@@ -67,7 +70,10 @@ fn test_time_weighted_metrics_avg_settlement_time() {
     client.single_payout(&recipient, &10_000);
     let m = client.get_time_weighted_metrics();
     assert_eq!(m.settlement_count, 1);
-    assert!(m.avg_settlement_time_secs >= 3600, "settlement time should be ~1h");
+    assert!(
+        m.avg_settlement_time_secs >= 3600,
+        "settlement time should be ~1h"
+    );
     assert_eq!(m.lock_count, 1);
     assert_eq!(m.avg_lock_size, 100_000);
 }
