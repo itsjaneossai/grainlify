@@ -853,6 +853,11 @@ pub fn emit_risk_flags_updated(env: &Env, event: RiskFlagsUpdated) {
 /// - The `beneficiary` field allows off-chain indexers to build a
 ///   per-address ticket inbox without scanning all tickets.
 
+pub fn emit_deprecation_state_changed(env: &Env, event: DeprecationStateChanged) {
+    let topics = (symbol_short!("deprec"),);
+    env.events().publish(topics, event);
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NotificationPreferencesUpdated {

@@ -84,20 +84,22 @@ use grainlify_contracts::storage_key_audit::{
 
 /// Validation rules for human-readable identifiers to prevent malicious or confusing inputs.
 ///
-/// This module provides consistent validation across all contracts for:
-/// - Bounty types and metadata
-/// - Any user-provided string identifiers
+/// Current on-chain guarantees:
+/// - Non-empty values only
+/// - Maximum length limits to prevent storage and log blow-ups
+/// - Deterministic panic messages at the length boundaries
 ///
-/// Rules enforced:
-/// - Maximum length limits to prevent UI/log issues
-/// - Allowed character sets (alphanumeric, spaces, safe punctuation)
-/// - No control characters that could cause display issues
-/// - No leading/trailing whitespace
-mod validation {
+/// Roadmap:
+/// - Soroban SDK currently gives this contract limited character-level inspection tools.
+/// - Until richer string iteration/normalization is practical on-chain, Unicode scalars
+///   accepted by the SDK are allowed as-is when they fit within the length bound.
+/// - Additional character-class or whitespace normalization rules should be added only when
+///   they can be enforced consistently across all callers and test environments.
+pub(crate) mod validation {
     use soroban_sdk::Env;
 
     /// Maximum length for bounty types and short identifiers
-    const MAX_TAG_LEN: u32 = 50;
+    pub(crate) const MAX_TAG_LEN: usize = 50;
 
     /// Validates a tag, type, or short identifier.
     ///
@@ -105,6 +107,11 @@ mod validation {
     /// * `env` - The contract environment
     /// * `tag` - The tag string to validate
     /// * `field_name` - Name of the field for error messages
+    ///
+    /// # Guarantees
+    /// - Rejects empty strings
+    /// - Rejects values longer than [`MAX_TAG_LEN`]
+    /// - Accepts SDK-permitted Unicode without additional normalization
     ///
     /// # Panics
     /// Panics if validation fails with a descriptive error message.
@@ -6163,9 +6170,66 @@ impl BountyEscrowContract {
             }
         }
 
-        // GUARD: release reentrancy lock
-        reentrancy_guard::release(&env);
-        result
+        // Emit batch event
+        emit_batch_funds_released(
+            &env,
+            BatchFundsReleased {
+                version: EVENT_VERSION_V2,
+                count: released_count,
+                total_amount,
+                timestamp,
+            },
+        );
+
+        Ok(released_count)
+    }
+    pub fn update_metadata(
+        env: Env,
+        _admin: Address,
+        bounty_id: u64,
+        repo_id: u64,
+        issue_id: u64,
+        bounty_type: soroban_sdk::String,
+        reference_hash: Option<soroban_sdk::Bytes>,
+    ) -> Result<(), Error> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        stored_admin.require_auth();
+        validation::validate_tag(&env, &bounty_type, "bounty_type");
+
+        let metadata = EscrowMetadata {
+            repo_id,
+            issue_id,
+            bounty_type,
+            reference_hash,
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::Metadata(bounty_id), &metadata);
+        Ok(())
+    }
+
+    pub fn get_metadata(env: Env, bounty_id: u64) -> Result<EscrowMetadata, Error> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Metadata(bounty_id))
+            .ok_or(Error::BountyNotFound)
+    }
+}
+
+impl traits::EscrowInterface for BountyEscrowContract {
+    /// Lock funds for a bounty through the trait interface
+    fn lock_funds(
+        env: &Env,
+        depositor: Address,
+        bounty_id: u64,
+        amount: i128,
+        deadline: u64,
+    ) -> Result<(), crate::Error> {
+        BountyEscrowContract::lock_funds(env.clone(), depositor, bounty_id, amount, deadline)
     }
 
     /// Batch release funds to multiple contributors in a single atomic transaction.
