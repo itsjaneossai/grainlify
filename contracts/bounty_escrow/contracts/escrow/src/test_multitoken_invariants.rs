@@ -89,6 +89,10 @@ fn test_inv1_healthy_escrow_passes() {
         status: EscrowStatus::Locked,
         deadline: 999,
         refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
+        archived: false,
+        archived_at: None,
     };
     assert!(multitoken_invariants::check_escrow_sanity(&escrow));
 }
@@ -102,6 +106,10 @@ fn test_inv1_negative_amount_fails() {
         status: EscrowStatus::Locked,
         deadline: 999,
         refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
+        archived: false,
+        archived_at: None,
     };
     assert!(!multitoken_invariants::check_escrow_sanity(&escrow));
 }
@@ -115,6 +123,10 @@ fn test_inv1_remaining_exceeds_amount_fails() {
         status: EscrowStatus::Locked,
         deadline: 999,
         refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
+        archived: false,
+        archived_at: None,
     };
     assert!(!multitoken_invariants::check_escrow_sanity(&escrow));
 }
@@ -128,6 +140,10 @@ fn test_inv1_released_with_nonzero_remaining_fails() {
         status: EscrowStatus::Released,
         deadline: 999,
         refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
+        archived: false,
+        archived_at: None,
     };
     assert!(!multitoken_invariants::check_escrow_sanity(&escrow));
 }
@@ -141,6 +157,10 @@ fn test_inv1_refunded_with_nonzero_remaining_fails() {
         status: EscrowStatus::Refunded,
         deadline: 999,
         refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
+        archived: false,
+        archived_at: None,
     };
     assert!(!multitoken_invariants::check_escrow_sanity(&escrow));
 }
@@ -313,6 +333,10 @@ fn test_inv4_no_refund_history_is_consistent() {
         status: EscrowStatus::Locked,
         deadline: 999,
         refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
+        archived: false,
+        archived_at: None,
     };
     assert!(multitoken_invariants::check_refund_consistency(&escrow));
 }

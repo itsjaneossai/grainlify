@@ -86,6 +86,7 @@ fn setup_active_program(
     let admin = Address::generate(env);
     let program_id = String::from_str(env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
+    client.publish_program();
     if amount > 0 {
         client.lock_program_funds(&amount);
     }
@@ -275,12 +276,7 @@ fn test_delegate_with_release_permission_can_single_payout_by() {
     let recipient = Address::generate(&env);
     let program_id = String::from_str(&env, "hack-2026");
 
-    client.set_program_delegate(
-        &program_id,
-        &admin,
-        &delegate,
-        &DELEGATE_PERMISSION_RELEASE,
-    );
+    client.set_program_delegate(&program_id, &admin, &delegate, &DELEGATE_PERMISSION_RELEASE);
 
     let updated = client.single_payout_by(&delegate, &recipient, &1_250);
     assert_eq!(updated.remaining_balance, 3_750);
@@ -315,7 +311,7 @@ fn test_metadata_only_delegate_cannot_execute_release() {
         }],
     };
 
-    let updated = client.update_program_metadata(&program_id, &delegate, &metadata);
+    let updated = client.update_program_metadata_by(&delegate, &program_id, &metadata);
     assert_eq!(updated.metadata, metadata);
 
     assert!(client
@@ -331,12 +327,7 @@ fn test_revoked_delegate_cannot_release_program_funds() {
     let recipient = Address::generate(&env);
     let program_id = String::from_str(&env, "hack-2026");
 
-    client.set_program_delegate(
-        &program_id,
-        &admin,
-        &delegate,
-        &DELEGATE_PERMISSION_RELEASE,
-    );
+    client.set_program_delegate(&program_id, &admin, &delegate, &DELEGATE_PERMISSION_RELEASE);
     client.revoke_program_delegate(&program_id, &admin);
 
     assert!(client
@@ -1543,9 +1534,7 @@ fn test_lock_program_funds_with_fees_enabled() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable fees: 2% lock fee (200 basis points)
-    client.set_lock_fee_rate(&200);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(200), &None, &None, &None, &None, &Some(true));
 
     // Lock 100_000: 2% fee = 2_000, net = 98_000
     let data = client.lock_program_funds(&100_000);
@@ -1567,9 +1556,7 @@ fn test_lock_program_funds_multiple_locks_with_fees() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable 1% lock fee (100 basis points)
-    client.set_lock_fee_rate(&100);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(100), &None, &None, &None, &None, &Some(true));
 
     // First lock: 100_000, fee = 1_000, net = 99_000
     client.lock_program_funds(&100_000);
@@ -1593,9 +1580,7 @@ fn test_lock_program_funds_fee_floor_rounding() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable 3% fee (300 basis points)
-    client.set_lock_fee_rate(&300);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(300), &None, &None, &None, &None, &Some(true));
 
     // Lock 10_001: fee = floor(10_001 * 300 / 10_000) = floor(300.03) = 300
     // Net = 10_001 - 300 = 9_701
@@ -1616,9 +1601,7 @@ fn test_lock_program_funds_zero_fee_rate() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable fees but set lock_fee_rate to 0
-    client.set_lock_fee_rate(&0);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(0), &None, &None, &None, &None, &Some(true));
 
     let data = client.lock_program_funds(&100_000);
     assert_eq!(data.remaining_balance, 100_000);
@@ -1637,8 +1620,7 @@ fn test_lock_program_funds_overflow_safety() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // No fees
-    client.set_fees_enabled(&false);
+    client.update_fee_config(&None, &None, &None, &None, &None, &Some(false));
 
     // Lock large amount
     let data = client.lock_program_funds(&safe_val);
@@ -1658,10 +1640,14 @@ fn test_lock_program_funds_fee_recipient_different_from_admin() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Set custom fee recipient
-    client.set_fee_recipient(&fee_recipient);
-    client.set_lock_fee_rate(&200); // 2%
-    client.set_fees_enabled(&true);
+    client.update_fee_config(
+        &Some(200),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &Some(true),
+    );
 
     let data = client.lock_program_funds(&100_000);
     assert_eq!(data.remaining_balance, 98_000);

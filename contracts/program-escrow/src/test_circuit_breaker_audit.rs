@@ -254,6 +254,7 @@ mod test {
             &Some(1000i128),
             &None,
         );
+        client.publish_program();
 
         // Open circuit
         env.as_contract(&client.address, || {
@@ -283,6 +284,7 @@ mod test {
             &Some(1000i128),
             &None,
         );
+        client.publish_program();
 
         // Open circuit
         env.as_contract(&client.address, || {

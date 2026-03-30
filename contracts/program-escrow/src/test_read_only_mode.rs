@@ -40,6 +40,7 @@ fn setup_program_with_admin<'a>(
         &None,
         &None,
     );
+    client.publish_program();
     (client, admin, payout_key, token_client)
 }
 
@@ -133,7 +134,7 @@ fn test_view_calls_succeed_in_read_only_mode() {
     // View calls should succeed
     let _flag = contract.is_read_only();
     let _pause = contract.get_pause_flags();
-    let _stats = contract.get_analytics();
+    let _stats = contract.get_program_analytics();
 }
 
 #[test]

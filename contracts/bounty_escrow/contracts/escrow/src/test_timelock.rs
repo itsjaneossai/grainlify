@@ -34,7 +34,7 @@ fn test_configure_timelock() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #54)")] // DelayBelowMinimum
+#[should_panic(expected = "Error(Contract, #57)")] // DelayBelowMinimum
 fn test_configure_timelock_below_minimum() {
     let env = Env::default();
     env.mock_all_auths();
@@ -52,7 +52,7 @@ fn test_configure_timelock_below_minimum() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #55)")] // DelayAboveMaximum
+#[should_panic(expected = "Error(Contract, #58)")] // DelayAboveMaximum
 fn test_configure_timelock_above_maximum() {
     let env = Env::default();
     env.mock_all_auths();
@@ -167,7 +167,7 @@ fn test_propose_admin_action_creates_pending_when_enabled() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #48)")] // TimelockNotElapsed
+#[should_panic(expected = "Error(Contract, #51)")] // TimelockNotElapsed
 fn test_execute_before_delay_reverts() {
     let env = Env::default();
     env.mock_all_auths();
@@ -278,7 +278,7 @@ fn test_execute_after_delay_succeeds() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #51)")] // ActionAlreadyExecuted
+#[should_panic(expected = "Error(Contract, #54)")] // ActionAlreadyExecuted
 fn test_execute_already_executed_reverts() {
     let env = Env::default();
     env.mock_all_auths();
@@ -348,7 +348,7 @@ fn test_cancel_pending_action() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #52)")] // ActionAlreadyCancelled
+#[should_panic(expected = "Error(Contract, #55)")] // ActionAlreadyCancelled
 fn test_execute_cancelled_action_reverts() {
     let env = Env::default();
     env.mock_all_auths();
@@ -379,7 +379,7 @@ fn test_execute_cancelled_action_reverts() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #51)")] // ActionAlreadyExecuted
+#[should_panic(expected = "Error(Contract, #54)")] // ActionAlreadyExecuted
 fn test_cancel_executed_action_reverts() {
     let env = Env::default();
     env.mock_all_auths();
@@ -479,7 +479,7 @@ fn test_non_admin_can_execute_after_delay() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #49)")] // TimelockEnabled
+#[should_panic(expected = "Error(Contract, #52)")] // TimelockEnabled
 fn test_direct_admin_call_blocked_when_enabled() {
     let env = Env::default();
     env.mock_all_auths();
@@ -668,7 +668,7 @@ fn test_set_paused_via_timelock() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #53)")] // InvalidPayload
+#[should_panic(expected = "Error(Contract, #56)")] // InvalidPayload
 fn test_invalid_payload_rejected() {
     let env = Env::default();
     env.mock_all_auths();

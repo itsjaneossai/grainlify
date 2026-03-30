@@ -1,3 +1,21 @@
+//! # Sandbox Isolation Tests — Contract Instance Independence
+//!
+//! Verifies that multiple deployed instances of the bounty escrow contract maintain
+//! complete isolation and cannot affect each other's state or balances.
+//!
+//! ## Test Coverage
+//!
+//! - **Instance isolation on lock**: Locking funds on one instance does not affect others
+//! - **Instance isolation on release**: Releasing from sandbox doesn't affect production
+//! - **Concurrent bounty IDs**: Same bounty ID can coexist across instances safely
+//!
+//! ## Security Properties Verified
+//!
+//! - Instance storage is completely isolated (no shared state)
+//! - Token transfers only affect the intended contract instance
+//! - Admin permissions are per-instance and cannot escalate across instances
+//! - Escrow indices are maintained independently per instance
+
 #![cfg(test)]
 
 use super::*;
@@ -24,8 +42,14 @@ fn create_escrow_contract<'a>(e: &Env) -> BountyEscrowContractClient<'a> {
     BountyEscrowContractClient::new(e, &contract_id)
 }
 
-/// Two contract instances deployed from the same WASM are fully independent:
-/// locking funds on instance A must not affect instance B's balance.
+/// Tests that two independent contract instances each maintain their own balance.
+///
+/// Scenario:
+/// 1. Deploy prod and sandbox instances with different admins
+/// 2. Lock funds only to prod instance
+/// 3. Verify prod balance increased, sandbox remained zero
+///
+/// Security invariant: Contract storage is instance-scoped and cannot be shared.
 #[test]
 fn test_sandbox_instance_isolation_lock() {
     let env = Env::default();
@@ -101,7 +125,15 @@ fn test_sandbox_instance_isolation_lock() {
     assert_eq!(sandbox.get_balance(), 0);
 }
 
-/// Operations on the sandbox instance don't affect the prod instance.
+/// Tests that releasing funds from sandbox instance does not affect production instance state.
+///
+/// Scenario:
+/// 1. Deploy both instances with same admin (allowed — different contract addresses)
+/// 2. Lock same bounty ID and amount on both instances
+/// 3. Release from sandbox only
+/// 4. Verify sandbox balance decremented, prod unchanged
+///
+/// Security invariant: Release operations are scoped to their contract instance.
 #[test]
 fn test_sandbox_instance_isolation_release() {
     let env = Env::default();
@@ -214,7 +246,16 @@ fn test_sandbox_instance_isolation_release() {
     assert_eq!(prod.get_balance(), amount);
 }
 
-/// Both instances can run the same bounty ID concurrently without conflict.
+/// Tests that the same bounty ID can exist on multiple instances with independent states.
+///
+/// Scenario:
+/// 1. Deploy two instances with same admin
+/// 2. Lock the same bounty_id on both instances but with different amounts (1500 vs 2500)
+/// 3. Verify balances and escrow info independently
+///
+/// Hot path: Bounty ID collision is prevented by per-instance storage
+///
+/// Security invariant: Bounty IDs are namespaced per contract address (public key).
 #[test]
 fn test_sandbox_same_bounty_id_no_conflict() {
     let env = Env::default();

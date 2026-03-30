@@ -41,6 +41,7 @@ fn setup_program_with_admin<'a>(
         &None,
         &None,
     );
+    client.publish_program();
     (client, admin, payout_key, token_client)
 }
 

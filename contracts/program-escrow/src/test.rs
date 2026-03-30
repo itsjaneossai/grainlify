@@ -26,7 +26,15 @@ fn setup_program(
     let token_admin_client = token::StellarAssetClient::new(env, &token_id);
 
     let program_id = String::from_str(env, "hack-2026");
-    client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
+    client.init_program(
+        &program_id,
+        &admin,
+        &token_id,
+        &admin,
+        &None,
+        &None,
+    );
+    client.publish_program();
 
     if initial_amount > 0 {
         token_admin_client.mint(&client.address, &initial_amount);
@@ -396,6 +404,7 @@ fn test_full_lifecycle_multi_program_batch_payouts() {
         &None,
         &None,
     );
+    client_a.publish_program();
     assert_eq!(prog_a.total_funds, 0);
     assert_eq!(prog_a.remaining_balance, 0);
 
@@ -412,6 +421,7 @@ fn test_full_lifecycle_multi_program_batch_payouts() {
         &None,
         &None,
     );
+    client_b.publish_program();
     assert_eq!(prog_b.total_funds, 0);
 
     // ── Phase 1: Lock funds in multiple steps ───────────────────────────
@@ -589,6 +599,7 @@ fn test_multi_token_balance_accounting_isolated_across_program_instances() {
         &None,
         &None,
     );
+    client_a.publish_program();
     client_b.init_program(
         &String::from_str(&env, "multi-token-b"),
         &payout_key_b,
@@ -597,6 +608,7 @@ fn test_multi_token_balance_accounting_isolated_across_program_instances() {
         &None,
         &None,
     );
+    client_b.publish_program();
 
     token_admin_client_a.mint(&client_a.address, &500_000);
     token_admin_client_b.mint(&client_b.address, &300_000);
@@ -678,10 +690,10 @@ fn test_admin_rotation() {
     env.mock_all_auths();
 
     client.set_admin(&admin);
-    assert_eq!(client.get_admin(), Some(admin.clone()));
+    assert_eq!(client.get_program_admin(), Some(admin.clone()));
 
     client.set_admin(&new_admin);
-    assert_eq!(client.get_admin(), Some(new_admin));
+    assert_eq!(client.get_program_admin(), Some(new_admin));
 }
 
 /// After admin rotation, new admin can update rate limit config.
@@ -1298,6 +1310,7 @@ fn test_multi_tenant_no_cross_program_balance_or_analytics() {
         &None,
         &None,
     );
+    client_a.publish_program();
     client_b.init_program(
         &String::from_str(&env, "prog-isolation-b"),
         &admin_b,
@@ -1306,6 +1319,7 @@ fn test_multi_tenant_no_cross_program_balance_or_analytics() {
         &None,
         &None,
     );
+    client_b.publish_program();
 
     token_sac.mint(&client_a.address, &500_000);
     token_sac.mint(&client_b.address, &300_000);
@@ -2299,9 +2313,7 @@ fn test_release_schedules_work_after_v2_program_state_migration() {
 
     client.create_program_release_schedule(&recipient, &100_000, &(now + 100));
 
-    let prog_v2_before = client.get_program_info_v2(&program_id);
-    println!("prog_v2_before.remaining_balance={}", prog_v2_before.remaining_balance);
-    println!("prog_v2_before.total_funds={}", prog_v2_before.total_funds);
+    let prog_v2_before = client.get_program_info();
     assert_eq!(prog_v2_before.remaining_balance, 400_000);
 
     env.ledger().set_timestamp(now + 200);
@@ -2320,7 +2332,7 @@ fn test_release_schedules_work_after_v2_program_state_migration() {
     assert_eq!(history.len(), 1);
     assert_eq!(history.get(0).unwrap().schedule_id, 1);
 
-    let prog_v2_after = client.get_program_info_v2(&program_id);
+    let prog_v2_after = client.get_program_info();
     assert_eq!(prog_v2_after.remaining_balance, 300_000);
     assert_eq!(prog_v2_after.payout_history.len(), 1);
 }

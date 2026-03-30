@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // contracts/program-escrow/src/threshold_monitor.rs
 //
 // Threshold Monitor Module

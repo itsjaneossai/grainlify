@@ -511,13 +511,6 @@ fn test_gas_proxy_event_footprint_per_operation_is_constant() {
     assert!(after_release >= before_release);
 }
 
-
-    // Unpause to verify idempotent
-    client.set_paused(&Some(false), &Some(false), &Some(false), &None);
-    client.set_paused(&Some(false), &Some(false), &Some(false), &None); // Call again - should not error
-    assert_eq!(is_paused(&client), false);
-}
-
 #[test]
 fn test_emergency_withdraw() {
     let (env, client, _contract_id) = create_test_env();

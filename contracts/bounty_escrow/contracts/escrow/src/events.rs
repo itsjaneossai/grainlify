@@ -343,7 +343,8 @@ pub struct FeeCollected {
     pub operation_type: FeeOperationType, // determines if the fee was collected on lock or release.
     pub amount: i128,                     // actual fee amount transferred
     pub fee_rate: i128,                   // fee rate applied in basis points (1 bp = 0.01 %).
-    pub fee_fixed: i128,                  // flat fee component
+    /// Configured flat fee component (smallest units) for this operation type.
+    pub fee_fixed: i128,
     pub recipient: Address,
     pub timestamp: u64, // Ledger timestamp.
 }
@@ -981,8 +982,8 @@ pub fn emit_emergency_withdraw(env: &Env, event: EmergencyWithdrawEvent) {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityIssued {
-    /// Unique cryptographically secure capability identifier.
-    pub capability_id: BytesN<32>,
+    /// Monotonic capability id (matches [`crate::DataKey::Capability`]).
+    pub capability_id: u64,
     /// Address that created and vouches for this capability.
     pub owner: Address,
     /// Address authorised to exercise this capability.
@@ -1003,7 +1004,7 @@ pub struct CapabilityIssued {
 
 /// Emit [`CapabilityIssued`]
 pub fn emit_capability_issued(env: &Env, event: CapabilityIssued) {
-    let topics = (symbol_short!("cap_new"), event.capability_id.clone());
+    let topics = (symbol_short!("cap_new"), event.capability_id);
     env.events().publish(topics, event);
 }
 
@@ -1027,7 +1028,7 @@ pub fn emit_capability_issued(env: &Env, event: CapabilityIssued) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityUsed {
     /// Capability that was exercised.
-    pub capability_id: BytesN<32>,
+    pub capability_id: u64,
     /// Address that exercised the capability.
     pub holder: Address,
     /// Action that was performed.
@@ -1046,7 +1047,7 @@ pub struct CapabilityUsed {
 
 /// Emit [`CapabilityUsed`]
 pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
-    let topics = (symbol_short!("cap_use"), event.capability_id.clone());
+    let topics = (symbol_short!("cap_use"), event.capability_id);
     env.events().publish(topics, event);
 }
 
@@ -1069,56 +1070,90 @@ pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityRevoked {
     /// Capability that was revoked
-    pub capability_id: BytesN<32>,
+    pub capability_id: u64,
     pub owner: Address,
     pub revoked_at: u64,
 }
 
 /// Emit [`CapabilityRevoked`]
 pub fn emit_capability_revoked(env: &Env, event: CapabilityRevoked) {
-    let topics = (symbol_short!("cap_rev"), event.capability_id.clone());
+    let topics = (symbol_short!("cap_rev"), event.capability_id);
     env.events().publish(topics, event);
 }
 
-/// Emitted when an operation's measured resource usage approaches the
-/// configured cap (at or above `WARNING_THRESHOLD_BPS / 10_000` of the cap).
-/// Only emitted in test / testutils builds; see `gas_budget` module docs.
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXPIRY, CLEANUP, ARCHIVE, GAS BUDGET
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Emitted when the admin updates [`crate::ExpiryConfig`].
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GasBudgetCapApproached {
-    /// Canonical operation symbol (e.g. `symbol_short!("lock")`).
-    pub operation: Symbol,
-    /// Measured CPU instructions consumed by this call.
-    pub cpu_used: u64,
-    /// Measured memory bytes consumed by this call.
-    pub mem_used: u64,
-    /// Configured CPU instruction cap (`0` = uncapped).
-    pub cpu_cap: u64,
-    /// Configured memory byte cap (`0` = uncapped).
-    pub mem_cap: u64,
-    /// The warning threshold that was crossed, in basis points.
-    pub threshold_bps: u32,
-    /// Ledger timestamp at the time of the check.
+#[derive(Clone, Debug)]
+pub struct ExpiryConfigUpdated {
+    pub default_expiry_duration: u64,
+    pub auto_cleanup_enabled: bool,
+    pub admin: Address,
     pub timestamp: u64,
 }
 
-/// Emitted when an operation's measured resource usage exceeds the configured
-/// cap. When `GasBudgetConfig::enforce` is `true` this accompanies a
-/// transaction revert. Only emitted in test / testutils builds.
+pub fn emit_expiry_config_updated(env: &Env, event: ExpiryConfigUpdated) {
+    let topics = (symbol_short!("exp_cfg"),);
+    env.events().publish(topics, event.clone());
+}
+
+/// Emitted when an escrow is marked [`crate::EscrowStatus::Expired`].
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+pub struct EscrowExpired {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub creation_timestamp: u64,
+    pub expiry: u64,
+    pub remaining_amount: i128,
+    pub timestamp: u64,
+}
+
+pub fn emit_escrow_expired(env: &Env, event: EscrowExpired) {
+    let topics = (symbol_short!("expired"), event.bounty_id);
+    env.events().publish(topics, event.clone());
+}
+
+/// Emitted when an expired escrow record is removed from storage.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct EscrowCleanedUp {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub cleaned_by: Address,
+    pub timestamp: u64,
+}
+
+pub fn emit_escrow_cleaned_up(env: &Env, event: EscrowCleanedUp) {
+    let topics = (symbol_short!("cln_up"), event.bounty_id);
+    env.events().publish(topics, event.clone());
+}
+
+/// Published when a measured operation exceeds its configured CPU or memory cap.
+#[contracttype]
+#[derive(Clone, Debug)]
 pub struct GasBudgetCapExceeded {
-    /// Canonical operation symbol (e.g. `symbol_short!("lock")`).
     pub operation: Symbol,
-    /// Measured CPU instructions consumed by this call.
     pub cpu_used: u64,
-    /// Measured memory bytes consumed by this call.
     pub mem_used: u64,
-    /// Configured CPU instruction cap (`0` = uncapped).
     pub cpu_cap: u64,
-    /// Configured memory byte cap (`0` = uncapped).
     pub mem_cap: u64,
-    /// Ledger timestamp at the time of the check.
+    pub timestamp: u64,
+}
+
+/// Published when usage approaches the configured cap (advisory).
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct GasBudgetCapApproached {
+    pub operation: Symbol,
+    pub cpu_used: u64,
+    pub mem_used: u64,
+    pub cpu_cap: u64,
+    pub mem_cap: u64,
+    pub threshold_bps: u32,
     pub timestamp: u64,
 }
 
@@ -1133,7 +1168,7 @@ pub struct GasBudgetCapExceeded {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"timelock_cfg"` |
+/// | 0 | `"tl_cfg"` (short symbol; Soroban topic limit 9 chars) |
 ///
 /// ### Data fields
 /// | Field | Type | Description |
@@ -1155,7 +1190,7 @@ pub struct TimelockConfigured {
 
 /// Emit [`TimelockConfigured`].
 pub fn emit_timelock_configured(env: &Env, event: TimelockConfigured) {
-    let topics = (symbol_short!("tmlk_cfg"),);
+    let topics = (symbol_short!("tl_cfg"),);
     env.events().publish(topics, event);
 }
 
@@ -1166,7 +1201,7 @@ pub fn emit_timelock_configured(env: &Env, event: TimelockConfigured) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"act_prop"` |
+/// | 0 | `"adm_prp"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1189,7 +1224,7 @@ pub struct AdminActionProposed {
 
 /// Emit [`AdminActionProposed`].
 pub fn emit_admin_action_proposed(env: &Env, event: AdminActionProposed) {
-    let topics = (symbol_short!("act_prop"),);
+    let topics = (symbol_short!("adm_prp"),);
     env.events().publish(topics, event);
 }
 
@@ -1200,7 +1235,7 @@ pub fn emit_admin_action_proposed(env: &Env, event: AdminActionProposed) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"act_exec"` |
+/// | 0 | `"adm_exe"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1221,7 +1256,7 @@ pub struct AdminActionExecuted {
 
 /// Emit [`AdminActionExecuted`].
 pub fn emit_admin_action_executed(env: &Env, event: AdminActionExecuted) {
-    let topics = (symbol_short!("act_exec"),);
+    let topics = (symbol_short!("adm_exe"),);
     env.events().publish(topics, event);
 }
 
@@ -1232,7 +1267,7 @@ pub fn emit_admin_action_executed(env: &Env, event: AdminActionExecuted) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"act_cncl"` |
+/// | 0 | `"adm_can"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1253,6 +1288,6 @@ pub struct AdminActionCancelled {
 
 /// Emit [`AdminActionCancelled`].
 pub fn emit_admin_action_cancelled(env: &Env, event: AdminActionCancelled) {
-    let topics = (symbol_short!("act_cncl"),);
+    let topics = (symbol_short!("adm_can"),);
     env.events().publish(topics, event);
 }

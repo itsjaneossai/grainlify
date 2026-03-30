@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Token decimal scaling and fee rounding helpers.
 //!
 //! ## Rounding Policy
