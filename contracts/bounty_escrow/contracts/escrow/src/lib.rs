@@ -1,5 +1,76 @@
 #![no_std]
 
+//! # Bounty Escrow Contract — State Machine & Contention Safety
+//!
+//! ## Escrow Status State Machine
+//!
+//! The escrow lifecycle follows a strict state machine with guarded transitions:
+//!
+//! ```text
+//!                    ┌─────────────┐
+//!                    │   Draft     │
+//!                    └──────┬──────┘
+//!                           │ lock_funds
+//!                           ▼
+//!                    ┌─────────────┐
+//!                    │   Locked    │◄──────────────────────┐
+//!                    └──────┬──────┘                       │
+//!                           │                              │
+//!            ┌──────────────┼──────────────┐               │
+//!            │              │              │               │
+//!            ▼              ▼              ▼               │
+//!     ┌─────────────┐ ┌─────────────┐ ┌─────────────┐     │
+//!     │  Released   │ │  Refunded   │ │  Partially  │     │
+//!     └─────────────┘ └─────────────┘ │  Refunded   │     │
+//!                                      └──────┬──────┘     │
+//!                                             │            │
+//!                                             │ refund     │
+//!                                             │ (partial)  │
+//!                                             └────────────┘
+//!
+//! ## Valid Transitions
+//!
+//! | From              | To                | Trigger           | Guard Conditions |
+//! |-------------------|-------------------|-------------------|------------------|
+//! | Draft             | Locked            | lock_funds        | amount > 0, valid deadline |
+//! | Locked            | Released          | release_funds     | admin auth, not frozen |
+//! | Locked            | Refunded          | refund            | deadline passed OR admin approval |
+//! | Locked            | PartiallyRefunded | refund (partial)  | admin approval with partial mode |
+//! | PartiallyRefunded | Released          | release_funds     | admin auth, not frozen |
+//! | PartiallyRefunded | Refunded          | refund            | deadline passed OR admin approval |
+//!
+//! ## Invalid Transitions (Always Fail)
+//!
+//! | From              | To                | Error             |
+//! |-------------------|-------------------|-------------------|
+//! | Released          | Refunded          | FundsNotLocked    |
+//! | Released          | PartiallyRefunded | FundsNotLocked    |
+//! | Released          | Released          | FundsNotLocked    |
+//! | Refunded          | Released          | FundsNotLocked    |
+//! | Refunded          | Refunded          | FundsNotLocked    |
+//! | PartiallyRefunded | Released          | FundsNotLocked    |
+//!
+//! ## Contention Safety
+//!
+//! Under interleaved calls (race conditions), the contract guarantees:
+//!
+//! 1. **Atomicity**: Each state transition is atomic within a transaction
+//! 2. **Mutual Exclusion**: Reentrancy guard prevents concurrent execution
+//! 3. **Deterministic Ordering**: Validation order is fixed to avoid ambiguous failures
+//! 4. **No Double-Spend**: Once funds are released or refunded, the other operation fails
+//! 5. **Status Guards**: All operations check status before proceeding
+//!
+//! ## Security Assumptions
+//!
+//! - Soroban executes contract calls atomically within a transaction
+//! - Reentrancy guard prevents cross-function re-entry
+//! - Status checks are performed before any state mutation
+//! - CEI (Checks-Effects-Interactions) pattern is followed
+//!
+//! ## Test Coverage
+//!
+//! See `test_front_running_ordering.rs` for comprehensive contention tests.
+
 pub mod events;
 pub mod gas_budget;
 pub mod invariants;
@@ -3833,6 +3904,33 @@ impl BountyEscrowContract {
     /// First valid release for a bounty transitions state to `Released`. Later release/refund/claim
     /// races against that bounty must fail with `Error::FundsNotLocked`.
     ///
+    /// # Transition Guards
+    /// This function enforces the following state transition guards:
+    ///
+    /// ## Pre-conditions (checked in order):
+    /// 1. **Reentrancy Guard**: Acquires reentrancy lock to prevent concurrent execution
+    /// 2. **Initialization**: Contract must be initialized (admin set)
+    /// 3. **Operational State**: Contract must not be paused for release operations
+    /// 4. **Authorization**: Admin must authorize the transaction
+    /// 5. **Escrow Existence**: Bounty must exist in storage
+    /// 6. **Freeze Check**: Escrow and depositor must not be frozen
+    /// 7. **Status Guard**: Escrow status must be `Locked` or `PartiallyRefunded`
+    ///
+    /// ## State Transition:
+    /// - **From**: `Locked` or `PartiallyRefunded`
+    /// - **To**: `Released`
+    /// - **Effect**: Sets `remaining_amount` to 0
+    ///
+    /// ## Post-conditions:
+    /// - External token transfer to contributor (after state update)
+    /// - Fee transfer to fee recipient (if applicable)
+    /// - Event emission
+    ///
+    /// ## Contention Safety:
+    /// - If status is `Released`, `Refunded`, or `Draft`, returns `Error::FundsNotLocked`
+    /// - Reentrancy guard prevents concurrent execution of any protected function
+    /// - CEI pattern ensures state is updated before external calls
+    ///
     /// # Security
     /// Reentrancy guard is always cleared before any explicit error return after acquisition.
     pub fn release_funds(env: Env, bounty_id: u64, contributor: Address) -> Result<(), Error> {
@@ -4611,6 +4709,36 @@ impl BountyEscrowContract {
     /// Refund is allowed when either:
     /// 1. The deadline has passed (standard full refund to depositor), or
     /// 2. An admin approval exists (early, partial, or custom-recipient refund).
+    ///
+    /// # Transition Guards
+    /// This function enforces the following state transition guards:
+    ///
+    /// ## Pre-conditions (checked in order):
+    /// 1. **Reentrancy Guard**: Acquires reentrancy lock to prevent concurrent execution
+    /// 2. **Operational State**: Contract must not be paused for refund operations
+    /// 3. **Escrow Existence**: Bounty must exist in storage
+    /// 4. **Freeze Check**: Escrow and depositor must not be frozen
+    /// 5. **Authorization**: Both admin and depositor must authorize the transaction
+    /// 6. **Status Guard**: Escrow status must be `Locked` or `PartiallyRefunded`
+    /// 7. **Claim Guard**: No pending claim exists (or claim is already executed)
+    /// 8. **Deadline/Approval Guard**: Deadline has passed OR admin approval exists
+    ///
+    /// ## State Transition:
+    /// - **From**: `Locked` or `PartiallyRefunded`
+    /// - **To**: `Refunded` (if full refund) or `PartiallyRefunded` (if partial)
+    /// - **Effect**: Decrements `remaining_amount` by refund amount
+    ///
+    /// ## Post-conditions:
+    /// - External token transfer to refund recipient (after state update)
+    /// - Refund record added to history
+    /// - Approval removed (if applicable)
+    /// - Event emission
+    ///
+    /// ## Contention Safety:
+    /// - If status is `Released` or `Refunded`, returns `Error::FundsNotLocked`
+    /// - Reentrancy guard prevents concurrent execution of any protected function
+    /// - CEI pattern ensures state is updated before external calls
+    /// - No double-spend: once refunded, release fails with `Error::FundsNotLocked`
     ///
     /// # Errors
     /// Returns `Error::NotInitialized` if admin is not set.
