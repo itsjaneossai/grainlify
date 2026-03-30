@@ -39,11 +39,7 @@ pub(crate) fn assert_escrow(env: &Env, escrow: &Escrow) {
     }
 
     // Strict mode: emit diagnostic event on every successful invariant check
-    strict_mode::strict_emit(
-        env,
-        symbol_short!("inv_ok"),
-        symbol_short!("escrow"),
-    );
+    strict_mode::strict_emit(env, symbol_short!("inv_ok"), symbol_short!("escrow"));
 }
 
 /// Strict-mode-only deep validation of escrow state.
@@ -65,11 +61,7 @@ pub(crate) fn strict_assert_escrow(env: &Env, escrow: &Escrow) {
             "released escrow remaining_amount must be zero",
         );
     }
-    strict_mode::strict_emit(
-        env,
-        symbol_short!("strict"),
-        symbol_short!("esc_chk"),
-    );
+    strict_mode::strict_emit(env, symbol_short!("strict"), symbol_short!("esc_chk"));
 }
 
 pub(crate) fn verify_escrow_invariants(escrow: &Escrow) -> bool {

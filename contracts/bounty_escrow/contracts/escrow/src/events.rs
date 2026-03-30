@@ -1248,3 +1248,87 @@ pub fn emit_admin_action_cancelled(env: &Env, event: AdminActionCancelled) {
     let topics = (symbol_short!("act_cncl"),);
     env.events().publish(topics, event);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECURRING LOCK EVENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Payload for the [`emit_recurring_lock_created`] event.
+///
+/// Emitted when a depositor creates a new recurring (subscription-style) lock schedule.
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"rl_create"` |
+/// | 1 | `recurring_id: u64` |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockCreated {
+    pub version: u32,
+    pub recurring_id: u64,
+    pub bounty_id: u64,
+    pub depositor: Address,
+    pub amount_per_period: i128,
+    pub period: u64,
+    pub timestamp: u64,
+}
+
+/// Emit [`RecurringLockCreated`].
+pub fn emit_recurring_lock_created(env: &Env, event: RecurringLockCreated) {
+    let topics = (symbol_short!("rl_creat"), event.recurring_id);
+    env.events().publish(topics, event);
+}
+
+/// Payload for the [`emit_recurring_lock_executed`] event.
+///
+/// Emitted each time a recurring lock period is executed and funds are locked.
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"rl_exec"` |
+/// | 1 | `recurring_id: u64` |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockExecuted {
+    pub version: u32,
+    pub recurring_id: u64,
+    pub bounty_id: u64,
+    pub amount_locked: i128,
+    pub cumulative_locked: i128,
+    pub execution_count: u32,
+    pub timestamp: u64,
+}
+
+/// Emit [`RecurringLockExecuted`].
+pub fn emit_recurring_lock_executed(env: &Env, event: RecurringLockExecuted) {
+    let topics = (symbol_short!("rl_exec"), event.recurring_id);
+    env.events().publish(topics, event);
+}
+
+/// Payload for the [`emit_recurring_lock_cancelled`] event.
+///
+/// Emitted when a depositor cancels their recurring lock schedule.
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"rl_cncl"` |
+/// | 1 | `recurring_id: u64` |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockCancelled {
+    pub version: u32,
+    pub recurring_id: u64,
+    pub cancelled_by: Address,
+    pub cumulative_locked: i128,
+    pub execution_count: u32,
+    pub timestamp: u64,
+}
+
+/// Emit [`RecurringLockCancelled`].
+pub fn emit_recurring_lock_cancelled(env: &Env, event: RecurringLockCancelled) {
+    let topics = (symbol_short!("rl_cncl"), event.recurring_id);
+    env.events().publish(topics, event);
+}

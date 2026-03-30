@@ -38,14 +38,16 @@ use crate::events::{
     emit_deprecation_state_changed, emit_deterministic_selection, emit_escrow_published,
     emit_funds_locked, emit_funds_locked_anon, emit_funds_refunded, emit_funds_released,
     emit_maintenance_mode_changed, emit_notification_preferences_updated,
-    emit_participant_filter_mode_changed, emit_risk_flags_updated, emit_ticket_claimed,
-    emit_ticket_issued, emit_timelock_configured, AdminActionCancelled, AdminActionExecuted,
-    AdminActionProposed, BatchFundsLocked, BatchFundsReleased, BountyEscrowInitialized,
-    ClaimCancelled, ClaimCreated, ClaimExecuted, CriticalOperationOutcome, DeprecationStateChanged,
-    DeterministicSelectionDerived, EscrowPublished, FundsLocked, FundsLockedAnon, FundsRefunded,
-    FundsReleased, MaintenanceModeChanged, NotificationPreferencesUpdated,
-    ParticipantFilterModeChanged, RefundTriggerType, RiskFlagsUpdated, TicketClaimed, TicketIssued,
-    TimelockConfigured, EVENT_VERSION_V2,
+    emit_participant_filter_mode_changed, emit_recurring_lock_cancelled,
+    emit_recurring_lock_created, emit_recurring_lock_executed, emit_risk_flags_updated,
+    emit_ticket_claimed, emit_ticket_issued, emit_timelock_configured, AdminActionCancelled,
+    AdminActionExecuted, AdminActionProposed, BatchFundsLocked, BatchFundsReleased,
+    BountyEscrowInitialized, ClaimCancelled, ClaimCreated, ClaimExecuted, CriticalOperationOutcome,
+    DeprecationStateChanged, DeterministicSelectionDerived, EscrowPublished, FundsLocked,
+    FundsLockedAnon, FundsRefunded, FundsReleased, MaintenanceModeChanged,
+    NotificationPreferencesUpdated, ParticipantFilterModeChanged, RecurringLockCancelled,
+    RecurringLockCreated, RecurringLockExecuted, RefundTriggerType, RiskFlagsUpdated,
+    TicketClaimed, TicketIssued, TimelockConfigured, EVENT_VERSION_V2,
 };
 use soroban_sdk::xdr::{FromXdr, ToXdr};
 use soroban_sdk::{
@@ -649,6 +651,12 @@ pub enum Error {
     CapUsesExhausted = 31,
     CapExceedsAuthority = 32,
     ContractDeprecated = 34,
+    RecurringLockNotFound = 57,
+    RecurringLockPeriodNotElapsed = 58,
+    RecurringLockCapExceeded = 59,
+    RecurringLockExpired = 60,
+    RecurringLockAlreadyCancelled = 61,
+    RecurringLockInvalidConfig = 62,
     ParticipantBlocked = 35,
     ParticipantNotAllowed = 36,
     UseEscrowV2ForAnon = 37,
@@ -854,6 +862,17 @@ pub enum DataKey {
     TimelockConfig, // TimelockConfig struct
     PendingAction(u64), // action_id -> PendingAction
     ActionCounter,      // monotonically increasing action_id
+
+    /// Recurring (subscription) lock configuration keyed by recurring_id.
+    RecurringLockConfig(u64),
+    /// Recurring lock mutable state keyed by recurring_id.
+    RecurringLockState(u64),
+    /// Index of all recurring lock IDs.
+    RecurringLockIndex,
+    /// Per-depositor index of recurring lock IDs.
+    DepositorRecurringIndex(Address),
+    /// Monotonically increasing recurring lock ID counter.
+    RecurringLockCounter,
 }
 
 #[contracttype]
@@ -1072,6 +1091,58 @@ pub struct LockFundsItem {
     /// Unix timestamp (seconds) after which the depositor may claim a refund
     /// without requiring admin approval. Must be in the future at lock time.
     pub deadline: u64,
+}
+
+/// End condition for a recurring lock: either a maximum total cap or an expiry timestamp.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RecurringEndCondition {
+    /// Stop after cumulative locked amount reaches this cap (in token base units).
+    MaxTotal(i128),
+    /// Stop after this Unix timestamp (seconds).
+    EndTime(u64),
+    /// Both: whichever triggers first.
+    Both(i128, u64),
+}
+
+/// Configuration for a recurring (subscription-style) lock.
+///
+/// Defines the parameters for periodic automated locks against a bounty or escrow.
+/// The depositor pre-authorizes recurring draws of `amount_per_period` every `period`
+/// seconds, subject to an end condition that prevents unbounded locking.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockConfig {
+    /// Unique identifier for this recurring lock schedule.
+    pub recurring_id: u64,
+    /// The bounty or escrow this recurring lock funds.
+    pub bounty_id: u64,
+    /// Address of the depositor whose tokens are drawn each period.
+    pub depositor: Address,
+    /// Amount (in token base units) to lock each period.
+    pub amount_per_period: i128,
+    /// Duration of each period in seconds (e.g. 2_592_000 for ~30 days).
+    pub period: u64,
+    /// End condition: cap, expiry, or both.
+    pub end_condition: RecurringEndCondition,
+    /// Deadline applied to each individual escrow created by the recurring lock.
+    pub escrow_deadline: u64,
+}
+
+/// Tracks the mutable state of an active recurring lock.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockState {
+    /// Timestamp of the last successful lock execution.
+    pub last_lock_time: u64,
+    /// Cumulative amount locked across all executions.
+    pub cumulative_locked: i128,
+    /// Number of executions completed so far.
+    pub execution_count: u32,
+    /// Whether this recurring lock has been cancelled by the depositor.
+    pub cancelled: bool,
+    /// Timestamp when the recurring lock was created.
+    pub created_at: u64,
 }
 
 /// A single escrow release entry within a [`BountyEscrowContract::batch_release_funds`] call.
@@ -5536,7 +5607,490 @@ impl BountyEscrowContract {
         reentrancy_guard::release(&env);
         result
     }
+
+    // ========================================================================
+    // RECURRING (SUBSCRIPTION) LOCK OPERATIONS
+    // ========================================================================
+
+    /// Create a recurring lock schedule that will lock `amount_per_period` tokens
+    /// every `period` seconds, subject to the given end condition.
+    ///
+    /// The depositor must authorize this call. The first lock execution is **not**
+    /// performed automatically — call [`execute_recurring_lock`] to trigger each
+    /// period's lock.
+    ///
+    /// # Arguments
+    /// * `depositor` — Address whose tokens will be drawn each period.
+    /// * `bounty_id` — The bounty this recurring lock funds.
+    /// * `amount_per_period` — Token amount to lock per period.
+    /// * `period` — Duration between locks in seconds (must be >= 60).
+    /// * `end_condition` — Cap / expiry / both.
+    /// * `escrow_deadline` — Deadline applied to each individual lock.
+    ///
+    /// # Errors
+    /// * `RecurringLockInvalidConfig` — Zero amount, zero period, period < 60s, or
+    ///   end condition with zero cap.
+    pub fn create_recurring_lock(
+        env: Env,
+        depositor: Address,
+        bounty_id: u64,
+        amount_per_period: i128,
+        period: u64,
+        end_condition: RecurringEndCondition,
+        escrow_deadline: u64,
+    ) -> Result<u64, Error> {
+        reentrancy_guard::acquire(&env);
+
+        // Contract must be initialized
+        if !env.storage().instance().has(&DataKey::Admin) {
+            reentrancy_guard::release(&env);
+            return Err(Error::NotInitialized);
+        }
+
+        // Operational state checks
+        if Self::check_paused(&env, symbol_short!("lock")) {
+            reentrancy_guard::release(&env);
+            return Err(Error::FundsPaused);
+        }
+        if Self::get_deprecation_state(&env).deprecated {
+            reentrancy_guard::release(&env);
+            return Err(Error::ContractDeprecated);
+        }
+
+        // Participant filter
+        Self::check_participant_filter(&env, depositor.clone())?;
+
+        // Authorization
+        depositor.require_auth();
+
+        // Validate config
+        if amount_per_period <= 0 || period < 60 {
+            reentrancy_guard::release(&env);
+            return Err(Error::RecurringLockInvalidConfig);
+        }
+
+        // Validate end condition
+        match &end_condition {
+            RecurringEndCondition::MaxTotal(cap) => {
+                if *cap <= 0 {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockInvalidConfig);
+                }
+            }
+            RecurringEndCondition::EndTime(t) => {
+                if *t <= env.ledger().timestamp() {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockInvalidConfig);
+                }
+            }
+            RecurringEndCondition::Both(cap, t) => {
+                if *cap <= 0 || *t <= env.ledger().timestamp() {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockInvalidConfig);
+                }
+            }
+        }
+
+        // Allocate recurring_id
+        let recurring_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::RecurringLockCounter)
+            .unwrap_or(0_u64)
+            + 1;
+        env.storage()
+            .persistent()
+            .set(&DataKey::RecurringLockCounter, &recurring_id);
+
+        let now = env.ledger().timestamp();
+
+        let config = RecurringLockConfig {
+            recurring_id,
+            bounty_id,
+            depositor: depositor.clone(),
+            amount_per_period,
+            period,
+            end_condition,
+            escrow_deadline,
+        };
+
+        let state = RecurringLockState {
+            last_lock_time: 0,
+            cumulative_locked: 0,
+            execution_count: 0,
+            cancelled: false,
+            created_at: now,
+        };
+
+        // Store config and state
+        env.storage()
+            .persistent()
+            .set(&DataKey::RecurringLockConfig(recurring_id), &config);
+        env.storage()
+            .persistent()
+            .set(&DataKey::RecurringLockState(recurring_id), &state);
+
+        // Update indexes
+        let mut index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::RecurringLockIndex)
+            .unwrap_or(Vec::new(&env));
+        index.push_back(recurring_id);
+        env.storage()
+            .persistent()
+            .set(&DataKey::RecurringLockIndex, &index);
+
+        let mut dep_index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::DepositorRecurringIndex(depositor.clone()))
+            .unwrap_or(Vec::new(&env));
+        dep_index.push_back(recurring_id);
+        env.storage().persistent().set(
+            &DataKey::DepositorRecurringIndex(depositor.clone()),
+            &dep_index,
+        );
+
+        emit_recurring_lock_created(
+            &env,
+            RecurringLockCreated {
+                version: EVENT_VERSION_V2,
+                recurring_id,
+                bounty_id,
+                depositor,
+                amount_per_period,
+                period,
+                timestamp: now,
+            },
+        );
+
+        reentrancy_guard::release(&env);
+        Ok(recurring_id)
+    }
+
+    /// Execute the next period's lock for a recurring lock schedule.
+    ///
+    /// This is permissionless — anyone can call it once the period has elapsed.
+    /// The depositor's tokens are transferred and a new escrow is created for
+    /// the bounty with a unique sub-ID (`bounty_id * 1_000_000 + execution_count`).
+    ///
+    /// # Arguments
+    /// * `recurring_id` — The recurring lock schedule to execute.
+    ///
+    /// # Errors
+    /// * `RecurringLockNotFound` — No schedule with this ID.
+    /// * `RecurringLockAlreadyCancelled` — Schedule was cancelled.
+    /// * `RecurringLockPeriodNotElapsed` — Not enough time since last execution.
+    /// * `RecurringLockCapExceeded` — Would exceed the total cap.
+    /// * `RecurringLockExpired` — Past the end time.
+    pub fn execute_recurring_lock(env: Env, recurring_id: u64) -> Result<(), Error> {
+        reentrancy_guard::acquire(&env);
+
+        // Contract must be initialized
+        if !env.storage().instance().has(&DataKey::Admin) {
+            reentrancy_guard::release(&env);
+            return Err(Error::NotInitialized);
+        }
+
+        // Operational state checks
+        if Self::check_paused(&env, symbol_short!("lock")) {
+            reentrancy_guard::release(&env);
+            return Err(Error::FundsPaused);
+        }
+        if Self::get_deprecation_state(&env).deprecated {
+            reentrancy_guard::release(&env);
+            return Err(Error::ContractDeprecated);
+        }
+
+        // Load config and state
+        let config = env
+            .storage()
+            .persistent()
+            .get::<DataKey, RecurringLockConfig>(&DataKey::RecurringLockConfig(recurring_id))
+            .ok_or_else(|| {
+                reentrancy_guard::release(&env);
+                Error::RecurringLockNotFound
+            })?;
+
+        let mut state = env
+            .storage()
+            .persistent()
+            .get::<DataKey, RecurringLockState>(&DataKey::RecurringLockState(recurring_id))
+            .ok_or_else(|| {
+                reentrancy_guard::release(&env);
+                Error::RecurringLockNotFound
+            })?;
+
+        // Check not cancelled
+        if state.cancelled {
+            reentrancy_guard::release(&env);
+            return Err(Error::RecurringLockAlreadyCancelled);
+        }
+
+        let now = env.ledger().timestamp();
+
+        // Check period elapsed (first execution uses created_at as base)
+        let base_time = if state.last_lock_time == 0 {
+            state.created_at
+        } else {
+            state.last_lock_time
+        };
+        if now < base_time + config.period {
+            reentrancy_guard::release(&env);
+            return Err(Error::RecurringLockPeriodNotElapsed);
+        }
+
+        // Check end condition
+        let amount = config.amount_per_period;
+        match &config.end_condition {
+            RecurringEndCondition::MaxTotal(cap) => {
+                if state.cumulative_locked + amount > *cap {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockCapExceeded);
+                }
+            }
+            RecurringEndCondition::EndTime(end_time) => {
+                if now > *end_time {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockExpired);
+                }
+            }
+            RecurringEndCondition::Both(cap, end_time) => {
+                if state.cumulative_locked + amount > *cap {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockCapExceeded);
+                }
+                if now > *end_time {
+                    reentrancy_guard::release(&env);
+                    return Err(Error::RecurringLockExpired);
+                }
+            }
+        }
+
+        // Generate a unique bounty sub-ID for this execution.
+        // Uses bounty_id * 1_000_000 + execution_count to avoid collisions.
+        let sub_bounty_id = config
+            .bounty_id
+            .checked_mul(1_000_000)
+            .and_then(|base| base.checked_add(state.execution_count as u64 + 1))
+            .unwrap_or_else(|| {
+                panic!("recurring lock sub-bounty ID overflow");
+            });
+
+        // Ensure sub-bounty doesn't already exist
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Escrow(sub_bounty_id))
+        {
+            reentrancy_guard::release(&env);
+            return Err(Error::BountyExists);
+        }
+
+        let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
+        let client = token::Client::new(&env, &token_addr);
+
+        // Transfer from depositor to contract
+        client.transfer(&config.depositor, &env.current_contract_address(), &amount);
+
+        // Resolve fee config and deduct fees
+        let (
+            lock_fee_rate,
+            _release_fee_rate,
+            lock_fixed_fee,
+            _release_fixed,
+            _fee_recipient,
+            fee_enabled,
+        ) = Self::resolve_fee_config(&env);
+        let fee_amount =
+            Self::combined_fee_amount(amount, lock_fee_rate, lock_fixed_fee, fee_enabled);
+        let net_amount = amount.checked_sub(fee_amount).unwrap_or(amount);
+        if net_amount <= 0 {
+            reentrancy_guard::release(&env);
+            return Err(Error::InvalidAmount);
+        }
+
+        // Route fee
+        if fee_amount > 0 {
+            Self::route_fee(
+                &env,
+                &client,
+                fee_amount,
+                lock_fee_rate,
+                events::FeeOperationType::Lock,
+            )?;
+        }
+
+        // Create the escrow record
+        let escrow = Escrow {
+            depositor: config.depositor.clone(),
+            amount: net_amount,
+            status: EscrowStatus::Draft,
+            deadline: config.escrow_deadline,
+            refund_history: vec![&env],
+            remaining_amount: net_amount,
+            archived: false,
+            archived_at: None,
+        };
+        invariants::assert_escrow(&env, &escrow);
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(sub_bounty_id), &escrow);
+
+        // Update escrow indexes
+        let mut index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EscrowIndex)
+            .unwrap_or(Vec::new(&env));
+        index.push_back(sub_bounty_id);
+        env.storage()
+            .persistent()
+            .set(&DataKey::EscrowIndex, &index);
+
+        let mut dep_index: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::DepositorIndex(config.depositor.clone()))
+            .unwrap_or(Vec::new(&env));
+        dep_index.push_back(sub_bounty_id);
+        env.storage().persistent().set(
+            &DataKey::DepositorIndex(config.depositor.clone()),
+            &dep_index,
+        );
+
+        // Update recurring lock state
+        state.last_lock_time = now;
+        state.cumulative_locked += net_amount;
+        state.execution_count += 1;
+        env.storage()
+            .persistent()
+            .set(&DataKey::RecurringLockState(recurring_id), &state);
+
+        // Emit escrow lock event
+        emit_funds_locked(
+            &env,
+            FundsLocked {
+                version: EVENT_VERSION_V2,
+                bounty_id: sub_bounty_id,
+                amount,
+                depositor: config.depositor.clone(),
+                deadline: config.escrow_deadline,
+            },
+        );
+
+        // Emit recurring execution event
+        emit_recurring_lock_executed(
+            &env,
+            RecurringLockExecuted {
+                version: EVENT_VERSION_V2,
+                recurring_id,
+                bounty_id: sub_bounty_id,
+                amount_locked: net_amount,
+                cumulative_locked: state.cumulative_locked,
+                execution_count: state.execution_count,
+                timestamp: now,
+            },
+        );
+
+        multitoken_invariants::assert_after_lock(&env);
+
+        audit_trail::log_action(
+            &env,
+            symbol_short!("rl_exec"),
+            config.depositor,
+            sub_bounty_id,
+        );
+
+        reentrancy_guard::release(&env);
+        Ok(())
+    }
+
+    /// Cancel a recurring lock schedule. Only the depositor can cancel.
+    ///
+    /// Cancellation prevents future executions but does not affect already-locked
+    /// escrows.
+    pub fn cancel_recurring_lock(env: Env, recurring_id: u64) -> Result<(), Error> {
+        reentrancy_guard::acquire(&env);
+
+        let config = env
+            .storage()
+            .persistent()
+            .get::<DataKey, RecurringLockConfig>(&DataKey::RecurringLockConfig(recurring_id))
+            .ok_or_else(|| {
+                reentrancy_guard::release(&env);
+                Error::RecurringLockNotFound
+            })?;
+
+        let mut state = env
+            .storage()
+            .persistent()
+            .get::<DataKey, RecurringLockState>(&DataKey::RecurringLockState(recurring_id))
+            .ok_or_else(|| {
+                reentrancy_guard::release(&env);
+                Error::RecurringLockNotFound
+            })?;
+
+        if state.cancelled {
+            reentrancy_guard::release(&env);
+            return Err(Error::RecurringLockAlreadyCancelled);
+        }
+
+        // Only the depositor can cancel their own recurring lock
+        config.depositor.require_auth();
+
+        state.cancelled = true;
+        env.storage()
+            .persistent()
+            .set(&DataKey::RecurringLockState(recurring_id), &state);
+
+        let now = env.ledger().timestamp();
+        emit_recurring_lock_cancelled(
+            &env,
+            RecurringLockCancelled {
+                version: EVENT_VERSION_V2,
+                recurring_id,
+                cancelled_by: config.depositor,
+                cumulative_locked: state.cumulative_locked,
+                execution_count: state.execution_count,
+                timestamp: now,
+            },
+        );
+
+        reentrancy_guard::release(&env);
+        Ok(())
+    }
+
+    /// View a recurring lock's configuration and current state.
+    pub fn get_recurring_lock(
+        env: Env,
+        recurring_id: u64,
+    ) -> Result<(RecurringLockConfig, RecurringLockState), Error> {
+        let config = env
+            .storage()
+            .persistent()
+            .get::<DataKey, RecurringLockConfig>(&DataKey::RecurringLockConfig(recurring_id))
+            .ok_or(Error::RecurringLockNotFound)?;
+        let state = env
+            .storage()
+            .persistent()
+            .get::<DataKey, RecurringLockState>(&DataKey::RecurringLockState(recurring_id))
+            .ok_or(Error::RecurringLockNotFound)?;
+        Ok((config, state))
+    }
+
+    /// List all recurring lock IDs for a given depositor.
+    pub fn get_depositor_recurring_locks(env: Env, depositor: Address) -> Vec<u64> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::DepositorRecurringIndex(depositor))
+            .unwrap_or(Vec::new(&env))
+    }
 }
 
 #[cfg(test)]
 mod test_max_counts;
+#[cfg(test)]
+mod test_recurring_locks;
