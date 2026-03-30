@@ -1,0 +1,33 @@
+Bounty Update - Grainlify
+
+Hi {{user_name}},
+
+There's an update on a bounty you're following. Here are the details:
+
+Bounty: #{{issue_number}}: {{issue_title}}
+Project: {{project_name}}
+Reward: {{reward_amount}} {{token_symbol}}
+Update: {{update_type}}
+Date: {{update_date}}
+
+{{update_description}}
+
+View Bounty Details: {{bounty_url}}
+
+Stay updated on this bounty by visiting the link above. You can also manage your notification preferences in your account settings.
+
+Best regards,
+The Grainlify Team
+
+---
+Help Center: {{help_url}}
+Privacy Policy: {{privacy_url}}
+Terms of Service: {{terms_url}}
+
+You're receiving this email because you have an account with Grainlify.
+Unsubscribe: {{unsubscribe_url}}
+Manage Preferences: {{notification_preferences_url}}
+
+{{company_name}}
+{{company_address}}
+© {{current_year}} {{company_name}}. All rights reserved.

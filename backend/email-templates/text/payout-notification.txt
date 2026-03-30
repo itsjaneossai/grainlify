@@ -1,0 +1,31 @@
+Payout Notification - Grainlify
+
+Hi {{user_name}},
+
+Great news! Your payout has been processed successfully. Here are the details:
+
+Amount: {{payout_amount}} {{token_symbol}}
+Project: {{project_name}}
+Issue: #{{issue_number}}
+Transaction ID: {{transaction_id}}
+Date: {{payout_date}}
+
+View Transaction Details: {{transaction_url}}
+
+The funds have been transferred to your connected wallet. Please allow a few minutes for the transaction to be confirmed on the blockchain.
+
+Best regards,
+The Grainlify Team
+
+---
+Help Center: {{help_url}}
+Privacy Policy: {{privacy_url}}
+Terms of Service: {{terms_url}}
+
+You're receiving this email because you have an account with Grainlify.
+Unsubscribe: {{unsubscribe_url}}
+Manage Preferences: {{notification_preferences_url}}
+
+{{company_name}}
+{{company_address}}
+© {{current_year}} {{company_name}}. All rights reserved.

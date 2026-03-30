@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+    <title>Payout Notification - Grainlify</title>
+    
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:AllowPNG/>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <style type="text/css">
+        table { border-collapse: collapse; }
+        td { font-family: Arial, sans-serif; }
+        a { text-decoration: none; }
+    </style>
+    <![endif]-->
+    
+    <style type="text/css">
+        /* Reset styles */
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+        body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f4f4f4; }
+        
+        /* iOS blue links */
+        a[x-apple-data-detectors] {
+            color: inherit !important;
+            text-decoration: none !important;
+            font-size: inherit !important;
+            font-family: inherit !important;
+            font-weight: inherit !important;
+            line-height: inherit !important;
+        }
+        
+        /* Gmail blue links */
+        u + #body a {
+            color: inherit;
+            text-decoration: none;
+            font-size: inherit;
+            font-family: inherit;
+            font-weight: inherit;
+            line-height: inherit;
+        }
+        
+        /* Samsung Mail */
+        #MessageViewBody a {
+            color: inherit;
+            text-decoration: none;
+            font-size: inherit;
+            font-family: inherit;
+            font-weight: inherit;
+            line-height: inherit;
+        }
+        
+        /* Responsive styles */
+        @media only screen and (max-width: 600px) {
+            .mobile-wrapper {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            .mobile-padding {
+                padding-left: 20px !important;
+                padding-right: 20px !important;
+            }
+            .mobile-stack {
+                display: block !important;
+                width: 100% !important;
+            }
+            .mobile-center {
+                text-align: center !important;
+            }
+            .mobile-hide {
+                display: none !important;
+            }
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            .dark-bg {
+                background-color: #1a1a1a !important;
+            }
+            .dark-text {
+                color: #ffffff !important;
+            }
+            .dark-border {
+                border-color: #333333 !important;
+            }
+        }
+    </style>
+</head>
+<body id="body" style="margin: 0 !important; padding: 0 !important; background-color: #f4f4f4;">
+    
+    <!-- Preview text (hidden) -->
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
+        Your payout of {{payout_amount}} has been processed successfully.
+        &nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+    </div>
+    
+    <!-- Email wrapper -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                
+                <!-- Main container -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="mobile-wrapper" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 30px 40px; background-color: #2d2820; border-radius: 8px 8px 0 0;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="left">
+                                        <!-- Logo placeholder - replace with actual logo -->
+                                        <img src="{{logo_url}}" alt="Grainlify" width="150" height="auto" style="display: block; max-width: 150px; height: auto;">
+                                    </td>
+                                    <td align="right" class="mobile-hide" style="color: #f5efe5; font-family: Arial, sans-serif; font-size: 14px;">
+                                        Payout Notification
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Body content -->
+                    <tr>
+                        <td style="padding: 40px;" class="mobile-padding">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                
+                                <!-- Greeting -->
+                                <tr>
+                                    <td style="padding-bottom: 20px; font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; color: #2d2820;">
+                                        Hi {{user_name}},
+                                    </td>
+                                </tr>
+                                
+                                <!-- Main content -->
+                                <tr>
+                                    <td style="padding-bottom: 30px; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
+                                        Great news! Your payout has been processed successfully. Here are the details:
+                                    </td>
+                                </tr>
+                                
+                                <!-- Payout details box -->
+                                <tr>
+                                    <td style="padding-bottom: 30px;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f8f8f8; border-radius: 8px; border: 1px solid #e0e0e0;">
+                                            <tr>
+                                                <td style="padding: 25px;">
+                                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                                        <!-- Amount -->
+                                                        <tr>
+                                                            <td style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 14px; color: #6b6b6b;">
+                                                                Amount
+                                                            </td>
+                                                            <td align="right" style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 24px; font-weight: bold; color: #2d2820;">
+                                                                {{payout_amount}} {{token_symbol}}
+                                                            </td>
+                                                        </tr>
+                                                        <!-- Project -->
+                                                        <tr>
+                                                            <td style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 14px; color: #6b6b6b;">
+                                                                Project
+                                                            </td>
+                                                            <td align="right" style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 14px; color: #2d2820;">
+                                                                {{project_name}}
+                                                            </td>
+                                                        </tr>
+                                                        <!-- Issue -->
+                                                        <tr>
+                                                            <td style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 14px; color: #6b6b6b;">
+                                                                Issue
+                                                            </td>
+                                                            <td align="right" style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 14px; color: #2d2820;">
+                                                                #{{issue_number}}
+                                                            </td>
+                                                        </tr>
+                                                        <!-- Transaction ID -->
+                                                        <tr>
+                                                            <td style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 14px; color: #6b6b6b;">
+                                                                Transaction ID
+                                                            </td>
+                                                            <td align="right" style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 12px; color: #6b6b6b; word-break: break-all;">
+                                                                {{transaction_id}}
+                                                            </td>
+                                                        </tr>
+                                                        <!-- Date -->
+                                                        <tr>
+                                                            <td style="font-family: Arial, sans-serif; font-size: 14px; color: #6b6b6b;">
+                                                                Date
+                                                            </td>
+                                                            <td align="right" style="font-family: Arial, sans-serif; font-size: 14px; color: #2d2820;">
+                                                                {{payout_date}}
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                
+                                <!-- CTA Button -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 30px;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                            <tr>
+                                                <td style="border-radius: 6px; background-color: #e8b931;">
+                                                    <a href="{{transaction_url}}" target="_blank" style="display: inline-block; padding: 14px 30px; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; color: #2d2820; text-decoration: none; border-radius: 6px;">
+                                                        View Transaction Details
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                
+                                <!-- Secondary content -->
+                                <tr>
+                                    <td style="padding-bottom: 20px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #6b6b6b;">
+                                        The funds have been transferred to your connected wallet. Please allow a few minutes for the transaction to be confirmed on the blockchain.
+                                    </td>
+                                </tr>
+                                
+                                <!-- Signature -->
+                                <tr>
+                                    <td style="padding-top: 20px; font-family: Arial, sans-serif; font-size: 14px; color: #4a4a4a;">
+                                        Best regards,<br>
+                                        <strong>The Grainlify Team</strong>
+                                    </td>
+                                </tr>
+                                
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px 40px; background-color: #f8f8f8; border-top: 1px solid #e0e0e0; border-radius: 0 0 8px 8px;" class="mobile-padding">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                
+                                <!-- Footer links -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 12px; color: #6b6b6b;">
+                                        <a href="{{help_url}}" style="color: #6b6b6b; text-decoration: underline;">Help Center</a>
+                                        &nbsp;&bull;&nbsp;
+                                        <a href="{{privacy_url}}" style="color: #6b6b6b; text-decoration: underline;">Privacy Policy</a>
+                                        &nbsp;&bull;&nbsp;
+                                        <a href="{{terms_url}}" style="color: #6b6b6b; text-decoration: underline;">Terms of Service</a>
+                                    </td>
+                                </tr>
+                                
+                                <!-- Unsubscribe -->
+                                <tr>
+                                    <td align="center" style="padding-bottom: 15px; font-family: Arial, sans-serif; font-size: 12px; color: #6b6b6b;">
+                                        You're receiving this email because you have an account with Grainlify.<br>
+                                        <a href="{{unsubscribe_url}}" style="color: #6b6b6b; text-decoration: underline;">Unsubscribe</a>
+                                        &nbsp;&bull;&nbsp;
+                                        <a href="{{notification_preferences_url}}" style="color: #6b6b6b; text-decoration: underline;">Manage Preferences</a>
+                                    </td>
+                                </tr>
+                                
+                                <!-- Company info -->
+                                <tr>
+                                    <td align="center" style="font-family: Arial, sans-serif; font-size: 11px; color: #999999; line-height: 1.5;">
+                                        {{company_name}}<br>
+                                        {{company_address}}<br>
+                                        &copy; {{current_year}} {{company_name}}. All rights reserved.
+                                    </td>
+                                </tr>
+                                
+                            </table>
+                        </td>
+                    </tr>
+                    
+                </table>
+                
+            </td>
+        </tr>
+    </table>
+    
+</body>
+</html>

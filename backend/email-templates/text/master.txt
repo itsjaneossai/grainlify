@@ -1,0 +1,27 @@
+{{subject}}
+
+Hi {{user_name}},
+
+{{main_content}}
+
+{{cta_text}}: {{cta_url}}
+
+{{#if secondary_content}}
+{{secondary_content}}
+{{/if}}
+
+Best regards,
+The Grainlify Team
+
+---
+Help Center: {{help_url}}
+Privacy Policy: {{privacy_url}}
+Terms of Service: {{terms_url}}
+
+You're receiving this email because you have an account with Grainlify.
+Unsubscribe: {{unsubscribe_url}}
+Manage Preferences: {{notification_preferences_url}}
+
+{{company_name}}
+{{company_address}}
+© {{current_year}} {{company_name}}. All rights reserved.
