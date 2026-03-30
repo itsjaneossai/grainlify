@@ -23,14 +23,19 @@ import {
 // -----------------------------------------------------------------------
 
 /** contracts/bounty_escrow/contracts/escrow/src/lib.rs — Error enum */
+// Matches the exact discriminant values declared in the Rust Error enum.
+// The SDK may support additional legacy numeric aliases beyond this list, but
+// this regression guard tracks only the on-chain contract's canonical values.
 const BOUNTY_ESCROW_DISCRIMINANTS: number[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-  21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+  1, 2, 6, 7, 13, 14, 16, 18, 21, 22, 23, 26, 27, 28,
+  29, 30, 31, 32, 34, 35, 36, 37, 39, 40, 41, 43, 45,
+  46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 201, 202,
+  203,
 ];
 
 /** contracts/grainlify-core/src/governance.rs — Error enum */
 const GOVERNANCE_DISCRIMINANTS: number[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 ];
 
 /** contracts/program-escrow/src/error_recovery.rs — u32 constants */
@@ -264,8 +269,8 @@ describe('parseContractError string matching', () => {
 describe('Cross-layer consistency', () => {
   it('bounty-escrow numeric and string parsers yield the same code', () => {
     const numericToString: [number, string][] = [
-      [3,  'BountyExists'],
-      [4,  'Bounty not found'],
+      [201, 'BountyExists'],
+      [202, 'Bounty not found'],
       [13, 'Bounty amount is invalid'],
       [16, 'InsufficientFunds'],
     ];
@@ -299,19 +304,19 @@ describe('Cross-layer consistency', () => {
 describe('Enum size regression guards', () => {
   it('ContractErrorCode has the expected number of values', () => {
     const count = Object.keys(ContractErrorCode).length;
-    // 10 program-escrow + 33 bounty-escrow + 14 governance + 3 circuit-breaker = 60
-    expect(count).toBe(60);
+    // Update this if the unified registry gains or removes codes.
+    expect(count).toBe(82);
   });
 
-  it('BOUNTY_ESCROW_ERROR_MAP has 33 entries', () => {
-    expect(Object.keys(BOUNTY_ESCROW_ERROR_MAP).length).toBe(33);
+  it('BOUNTY_ESCROW_ERROR_MAP has the expected number of entries', () => {
+    expect(Object.keys(BOUNTY_ESCROW_ERROR_MAP).length).toBe(43);
   });
 
-  it('GOVERNANCE_ERROR_MAP has 14 entries', () => {
-    expect(Object.keys(GOVERNANCE_ERROR_MAP).length).toBe(14);
+  it('GOVERNANCE_ERROR_MAP has the expected number of entries', () => {
+    expect(Object.keys(GOVERNANCE_ERROR_MAP).length).toBe(15);
   });
 
-  it('CIRCUIT_BREAKER_ERROR_MAP has 3 entries', () => {
+  it('CIRCUIT_BREAKER_ERROR_MAP has the expected number of entries', () => {
     expect(Object.keys(CIRCUIT_BREAKER_ERROR_MAP).length).toBe(3);
   });
 });

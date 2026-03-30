@@ -68,6 +68,11 @@ export enum ContractErrorCode {
   INVALID_STATE            = 'INVALID_STATE',            // 13
   NOT_PAUSED               = 'NOT_PAUSED',               // 14
   INVALID_ASSET_ID         = 'INVALID_ASSET_ID',         // 15
+  INSUFFICIENT_BALANCE     = 'INSUFFICIENT_BALANCE',     // 16
+  EMPTY_BATCH              = 'EMPTY_BATCH',              // 17
+  LENGTH_MISMATCH          = 'LENGTH_MISMATCH',          // 18
+  AMOUNT_BELOW_MIN         = 'AMOUNT_BELOW_MIN',         // 19
+  AMOUNT_ABOVE_MAX         = 'AMOUNT_ABOVE_MAX',         // 20
 
   // ── 100-199: Governance Errors ─────────────────────────────────────────
   GOV_THRESHOLD_NOT_MET      = 'GOV_THRESHOLD_NOT_MET',      // 101
@@ -110,6 +115,22 @@ export enum ContractErrorCode {
   BOUNTY_ANON_REFUND_RESOLVE = 'BOUNTY_ANON_REFUND_RESOLVE', // 222
   BOUNTY_ANON_RESOLVER_NOT_SET = 'BOUNTY_ANON_RESOLVER_NOT_SET', // 223
   BOUNTY_USE_INFO_V2         = 'BOUNTY_USE_INFO_V2',         // 225
+  BOUNTY_FUNDS_PAUSED               = 'BOUNTY_FUNDS_PAUSED',               // 224
+  BOUNTY_CAP_NOT_FOUND              = 'BOUNTY_CAP_NOT_FOUND',              // 226
+  BOUNTY_CAP_EXPIRED                = 'BOUNTY_CAP_EXPIRED',                // 227
+  BOUNTY_CAP_REVOKED                = 'BOUNTY_CAP_REVOKED',                // 228
+  BOUNTY_CAP_ACTION_MISMATCH        = 'BOUNTY_CAP_ACTION_MISMATCH',        // 229
+  BOUNTY_CAP_AMOUNT_EXCEEDED        = 'BOUNTY_CAP_AMOUNT_EXCEEDED',        // 230
+  BOUNTY_CAP_USES_EXHAUSTED         = 'BOUNTY_CAP_USES_EXHAUSTED',         // 231
+  BOUNTY_CAP_EXCEEDS_AUTHORITY      = 'BOUNTY_CAP_EXCEEDS_AUTHORITY',      // 232
+
+  // Aliases — share the same string value as base codes so callers may use
+  // contract-specific names (e.g. BOUNTY_DEADLINE_NOT_PASSED) interchangeably
+  // with the generic names without duplicating messages.
+  BOUNTY_DEADLINE_NOT_PASSED        = 'DEADLINE_NOT_PASSED',
+  BOUNTY_INVALID_AMOUNT             = 'INVALID_AMOUNT',
+  BOUNTY_INVALID_DEADLINE           = 'INVALID_DEADLINE',
+  BOUNTY_INSUFFICIENT_FUNDS         = 'INSUFFICIENT_FUNDS',
 
   // ── 300-399: Identity / KYC ───────────────────────────────────────────
   IDENTITY_INVALID_SIGNATURE = 'IDENTITY_INVALID_SIGNATURE', // 301
@@ -125,7 +146,9 @@ export enum ContractErrorCode {
   PROGRAM_INVALID_BATCH_SIZE = 'PROGRAM_INVALID_BATCH_SIZE', // 403
 
   // ── 1000+: Circuit-Breaker ────────────────────────────────────────────
-  CIRCUIT_OPEN               = 'CIRCUIT_OPEN',               // 1001
+  CIRCUIT_OPEN                      = 'CIRCUIT_OPEN',               // 1001
+  CIRCUIT_TRANSFER_FAILED           = 'CIRCUIT_TRANSFER_FAILED',    // 1002
+  CIRCUIT_INSUFFICIENT_BALANCE      = 'INSUFFICIENT_BALANCE',       // 1003 alias
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +158,7 @@ export enum ContractErrorCode {
 const CONTRACT_ERROR_MESSAGES: Record<ContractErrorCode, string> = {
   // Common
   [ContractErrorCode.ALREADY_INITIALIZED]:       'Contract already initialized',
-  [ContractErrorCode.NOT_INITIALIZED]:           'Contract not initialized',
+  [ContractErrorCode.NOT_INITIALIZED]:           'Program not initialized',
   [ContractErrorCode.UNAUTHORIZED]:              'Unauthorized',
   [ContractErrorCode.INVALID_AMOUNT]:            'Invalid amount',
   [ContractErrorCode.INSUFFICIENT_FUNDS]:        'Insufficient funds',
@@ -149,6 +172,11 @@ const CONTRACT_ERROR_MESSAGES: Record<ContractErrorCode, string> = {
   [ContractErrorCode.INVALID_STATE]:            'Invalid operation for current state',
   [ContractErrorCode.NOT_PAUSED]:               'Operation requires paused state',
   [ContractErrorCode.INVALID_ASSET_ID]:         'Invalid asset identifier',
+  [ContractErrorCode.INSUFFICIENT_BALANCE]:      'Insufficient balance',
+  [ContractErrorCode.EMPTY_BATCH]:               'Cannot process empty batch',
+  [ContractErrorCode.LENGTH_MISMATCH]:           'Recipients and amounts must have the same length',
+  [ContractErrorCode.AMOUNT_BELOW_MIN]:          'Amount is below minimum',
+  [ContractErrorCode.AMOUNT_ABOVE_MAX]:          'Amount exceeds maximum allowed',
 
   // Governance
   [ContractErrorCode.GOV_THRESHOLD_NOT_MET]:      'Threshold not met',
@@ -191,6 +219,14 @@ const CONTRACT_ERROR_MESSAGES: Record<ContractErrorCode, string> = {
   [ContractErrorCode.BOUNTY_ANON_REFUND_RESOLVE]: 'Anonymous refund requires resolution',
   [ContractErrorCode.BOUNTY_ANON_RESOLVER_NOT_SET]: 'Anonymous resolver address not set',
   [ContractErrorCode.BOUNTY_USE_INFO_V2]:         'Use get_escrow_info_v2 for anonymous escrows',
+  [ContractErrorCode.BOUNTY_FUNDS_PAUSED]:               'Funds paused',
+  [ContractErrorCode.BOUNTY_CAP_NOT_FOUND]:              'Capability token not found',
+  [ContractErrorCode.BOUNTY_CAP_EXPIRED]:                'Capability token expired',
+  [ContractErrorCode.BOUNTY_CAP_REVOKED]:                'Capability token revoked',
+  [ContractErrorCode.BOUNTY_CAP_ACTION_MISMATCH]:        'Capability action mismatch',
+  [ContractErrorCode.BOUNTY_CAP_AMOUNT_EXCEEDED]:        'Capability amount exceeded',
+  [ContractErrorCode.BOUNTY_CAP_USES_EXHAUSTED]:         'Capability uses exhausted',
+  [ContractErrorCode.BOUNTY_CAP_EXCEEDS_AUTHORITY]:      'Capability exceeds authority',
 
   // Identity
   [ContractErrorCode.IDENTITY_INVALID_SIGNATURE]: 'Invalid identity signature',
@@ -207,6 +243,7 @@ const CONTRACT_ERROR_MESSAGES: Record<ContractErrorCode, string> = {
 
   // Circuit Breaker
   [ContractErrorCode.CIRCUIT_OPEN]:               'Circuit breaker is open',
+  [ContractErrorCode.CIRCUIT_TRANSFER_FAILED]:    'Token transfer failed',
 };
 
 // ---------------------------------------------------------------------------
@@ -230,6 +267,18 @@ export const UNIFIED_ERROR_MAP: Record<number, ContractErrorCode> = {
   13: ContractErrorCode.INVALID_STATE,
   14: ContractErrorCode.NOT_PAUSED,
   15: ContractErrorCode.INVALID_ASSET_ID,
+  16: ContractErrorCode.INSUFFICIENT_FUNDS,
+  18: ContractErrorCode.BOUNTY_FUNDS_PAUSED,
+  21: ContractErrorCode.NOT_PAUSED,
+  22: ContractErrorCode.BOUNTY_CLAIM_PENDING,
+  23: ContractErrorCode.BOUNTY_TICKET_NOT_FOUND,
+  26: ContractErrorCode.BOUNTY_CAP_NOT_FOUND,
+  27: ContractErrorCode.BOUNTY_CAP_EXPIRED,
+  28: ContractErrorCode.BOUNTY_CAP_REVOKED,
+  29: ContractErrorCode.BOUNTY_CAP_ACTION_MISMATCH,
+  30: ContractErrorCode.BOUNTY_CAP_AMOUNT_EXCEEDED,
+  31: ContractErrorCode.BOUNTY_CAP_USES_EXHAUSTED,
+  32: ContractErrorCode.BOUNTY_CAP_EXCEEDS_AUTHORITY,
 
   // Governance
   101: ContractErrorCode.GOV_THRESHOLD_NOT_MET,
@@ -288,6 +337,78 @@ export const UNIFIED_ERROR_MAP: Record<number, ContractErrorCode> = {
 
   // Circuit Breaker
   1001: ContractErrorCode.CIRCUIT_OPEN,
+  1002: ContractErrorCode.CIRCUIT_TRANSFER_FAILED,
+  1003: ContractErrorCode.INSUFFICIENT_BALANCE,
+};
+
+export const BOUNTY_ESCROW_ERROR_MAP: Record<number, ContractErrorCode> = {
+  1: ContractErrorCode.ALREADY_INITIALIZED,
+  2: ContractErrorCode.NOT_INITIALIZED,
+  6: ContractErrorCode.DEADLINE_NOT_PASSED,
+  7: ContractErrorCode.UNAUTHORIZED,
+  13: ContractErrorCode.INVALID_AMOUNT,
+  14: ContractErrorCode.INVALID_DEADLINE,
+  16: ContractErrorCode.INSUFFICIENT_FUNDS,
+  19: ContractErrorCode.BOUNTY_AMOUNT_BELOW_MIN,
+  20: ContractErrorCode.BOUNTY_AMOUNT_ABOVE_MAX,
+  18: ContractErrorCode.BOUNTY_FUNDS_PAUSED,
+  21: ContractErrorCode.NOT_PAUSED,
+  22: ContractErrorCode.BOUNTY_CLAIM_PENDING,
+  23: ContractErrorCode.BOUNTY_TICKET_NOT_FOUND,
+  26: ContractErrorCode.BOUNTY_CAP_NOT_FOUND,
+  27: ContractErrorCode.BOUNTY_CAP_EXPIRED,
+  28: ContractErrorCode.BOUNTY_CAP_REVOKED,
+  29: ContractErrorCode.BOUNTY_CAP_ACTION_MISMATCH,
+  30: ContractErrorCode.BOUNTY_CAP_AMOUNT_EXCEEDED,
+  31: ContractErrorCode.BOUNTY_CAP_USES_EXHAUSTED,
+  32: ContractErrorCode.BOUNTY_CAP_EXCEEDS_AUTHORITY,
+  34: ContractErrorCode.CONTRACT_DEPRECATED,
+  35: ContractErrorCode.BOUNTY_PARTICIPANT_BLOCKED,
+  36: ContractErrorCode.BOUNTY_PARTICIPANT_NOT_ALLOWED,
+  37: ContractErrorCode.BOUNTY_USE_INFO_V2,
+  39: ContractErrorCode.BOUNTY_ANON_REFUND_RESOLVE,
+  40: ContractErrorCode.BOUNTY_ANON_RESOLVER_NOT_SET,
+  41: ContractErrorCode.BOUNTY_NOT_ANONYMOUS_ESCROW,
+  43: ContractErrorCode.BOUNTY_UPGRADE_SAFETY_CHECK_FAILED,
+  45: ContractErrorCode.INVALID_STATE,
+  46: ContractErrorCode.INVALID_STATE,
+  47: ContractErrorCode.INVALID_STATE,
+  48: ContractErrorCode.INVALID_STATE,
+  49: ContractErrorCode.INVALID_STATE,
+  50: ContractErrorCode.INVALID_STATE,
+  51: ContractErrorCode.INVALID_STATE,
+  52: ContractErrorCode.INVALID_STATE,
+  53: ContractErrorCode.INVALID_STATE,
+  54: ContractErrorCode.INVALID_STATE,
+  55: ContractErrorCode.INVALID_STATE,
+  56: ContractErrorCode.INVALID_STATE,
+  201: ContractErrorCode.BOUNTY_EXISTS,
+  202: ContractErrorCode.BOUNTY_NOT_FOUND,
+  203: ContractErrorCode.BOUNTY_FUNDS_NOT_LOCKED,
+};
+
+export const GOVERNANCE_ERROR_MAP: Record<number, ContractErrorCode> = {
+  1: ContractErrorCode.NOT_INITIALIZED,
+  2: ContractErrorCode.GOV_INVALID_THRESHOLD,
+  3: ContractErrorCode.GOV_THRESHOLD_TOO_LOW,
+  4: ContractErrorCode.GOV_INSUFFICIENT_STAKE,
+  5: ContractErrorCode.GOV_PROPOSALS_NOT_FOUND,
+  6: ContractErrorCode.GOV_PROPOSAL_NOT_FOUND,
+  7: ContractErrorCode.GOV_PROPOSAL_NOT_ACTIVE,
+  8: ContractErrorCode.GOV_VOTING_NOT_STARTED,
+  9: ContractErrorCode.GOV_VOTING_ENDED,
+  10: ContractErrorCode.GOV_VOTING_STILL_ACTIVE,
+  11: ContractErrorCode.GOV_ALREADY_VOTED,
+  12: ContractErrorCode.GOV_PROPOSAL_NOT_APPROVED,
+  13: ContractErrorCode.GOV_EXECUTION_DELAY_NOT_MET,
+  14: ContractErrorCode.GOV_PROPOSAL_EXPIRED,
+  15: ContractErrorCode.INSUFFICIENT_BALANCE,
+};
+
+export const CIRCUIT_BREAKER_ERROR_MAP: Record<number, ContractErrorCode> = {
+  1001: ContractErrorCode.CIRCUIT_OPEN,
+  1002: ContractErrorCode.CIRCUIT_TRANSFER_FAILED,
+  1003: ContractErrorCode.INSUFFICIENT_BALANCE,
 };
 
 /**
@@ -302,17 +423,29 @@ export function resolveContractError(code: number): ContractError {
   return new ContractError(`Unknown contract error (code ${code})`, 'CONTRACT_ERROR', code);
 }
 
-// ── Legacy support (mappings) ──────────────────────────────────────────────
-
-export const BOUNTY_ESCROW_ERROR_MAP = UNIFIED_ERROR_MAP;
-export const GOVERNANCE_ERROR_MAP = UNIFIED_ERROR_MAP;
-export const CIRCUIT_BREAKER_ERROR_MAP = UNIFIED_ERROR_MAP;
-
 export function parseContractErrorByCode(
   numericCode: number,
-  _contract: string
+  contract: string
 ): ContractError {
-  return resolveContractError(numericCode);
+  const contractMap = (() => {
+    switch (contract) {
+      case 'bounty_escrow':
+        return BOUNTY_ESCROW_ERROR_MAP;
+      case 'governance':
+        return GOVERNANCE_ERROR_MAP;
+      case 'circuit_breaker':
+        return CIRCUIT_BREAKER_ERROR_MAP;
+      default:
+        return UNIFIED_ERROR_MAP;
+    }
+  })();
+
+  const errorCode = contractMap[numericCode];
+  if (errorCode) {
+    return new ContractError(CONTRACT_ERROR_MESSAGES[errorCode], errorCode, numericCode);
+  }
+
+  return new ContractError(`Unknown contract error (code ${numericCode})`, 'CONTRACT_ERROR', numericCode);
 }
 
 export function createContractError(errorCode: ContractErrorCode, details?: string): ContractError {
@@ -324,15 +457,24 @@ export function createContractError(errorCode: ContractErrorCode, details?: stri
 
 export function parseContractError(error: any): ContractError {
   const errorMessage = error?.message || error?.toString() || 'Unknown contract error';
-  
-  // Try to match by message pattern if numeric code is not available
+
+  // Primary: match Soroban-style short error strings and policy message
+  // variants before the generic message table so specific policy errors do not
+  // get swallowed by broader escrow message strings.
+  for (const [pattern, code] of SOROBAN_ERROR_PATTERNS) {
+    if (errorMessage.includes(pattern)) {
+      return createContractError(code);
+    }
+  }
+
+  // Secondary: match by human-readable message substrings
   for (const [codeStr, msg] of Object.entries(CONTRACT_ERROR_MESSAGES)) {
     if (errorMessage.includes(msg)) {
       return createContractError(codeStr as ContractErrorCode);
     }
   }
-  
-  // Specific patterns for Soroban host errors
+
+  // Tertiary: numeric code embedded in Soroban host error string
   if (errorMessage.includes('Error(Contract, ')) {
     const match = errorMessage.match(/Error\(Contract, (\d+)\)/);
     if (match) {
@@ -342,6 +484,59 @@ export function parseContractError(error: any): ContractError {
 
   return new ContractError(errorMessage, 'CONTRACT_ERROR');
 }
+
+// ---------------------------------------------------------------------------
+// Soroban-style error pattern table
+// ---------------------------------------------------------------------------
+// Maps the short CamelCase or descriptive strings emitted directly by contract
+// panics / host traps to the canonical ContractErrorCode.  Checked in order —
+// more-specific patterns must appear before shorter ones that are substrings.
+// ---------------------------------------------------------------------------
+const SOROBAN_ERROR_PATTERNS: ReadonlyArray<[string, ContractErrorCode]> = [
+  // Program-escrow patterns
+  ['Program not initialized',                       ContractErrorCode.NOT_INITIALIZED],
+  ['Program already initialized',                   ContractErrorCode.ALREADY_INITIALIZED],
+  ['require_auth failed',                           ContractErrorCode.UNAUTHORIZED],
+  ['Amount must be greater than zero',              ContractErrorCode.INVALID_AMOUNT],
+  ['Recipients and amounts vectors must have the same length', ContractErrorCode.LENGTH_MISMATCH],
+  ['Amount below minimum allowed',                  ContractErrorCode.AMOUNT_BELOW_MIN],
+  ['amount is below the minimum',                   ContractErrorCode.AMOUNT_BELOW_MIN],
+  ['below min',                                     ContractErrorCode.AMOUNT_BELOW_MIN],
+  ['amount exceeds maximum',                        ContractErrorCode.AMOUNT_ABOVE_MAX],
+  ['above max',                                     ContractErrorCode.AMOUNT_ABOVE_MAX],
+  ['Bounty amount is invalid',                      ContractErrorCode.INVALID_AMOUNT],
+  ['Bounty deadline is invalid',                    ContractErrorCode.INVALID_DEADLINE],
+  ['Fee recipient address not set',                 ContractErrorCode.BOUNTY_FEE_RECIPIENT_NOT_SET],
+  ['Payout amount overflow',                        ContractErrorCode.OVERFLOW],
+  ['AmountBelowMinimum',                            ContractErrorCode.AMOUNT_BELOW_MIN],
+  ['AmountAboveMaximum',                            ContractErrorCode.AMOUNT_ABOVE_MAX],
+
+  // Bounty-escrow CamelCase patterns (order: longer/more-specific first)
+  ['DuplicateBountyId',                             ContractErrorCode.BOUNTY_DUPLICATE_ID],
+  ['BatchSizeMismatch',                             ContractErrorCode.BOUNTY_BATCH_SIZE_MISMATCH],
+  ['InvalidBatchSize',                              ContractErrorCode.BOUNTY_INVALID_BATCH_SIZE],
+  ['InvalidFeeRate',                                ContractErrorCode.BOUNTY_INVALID_FEE_RATE],
+  ['RefundNotApproved',                             ContractErrorCode.BOUNTY_REFUND_NOT_APPROVED],
+  ['DeadlineNotPassed',                             ContractErrorCode.DEADLINE_NOT_PASSED],
+  ['FundsNotLocked',                                ContractErrorCode.BOUNTY_FUNDS_NOT_LOCKED],
+  ['FundsPaused',                                   ContractErrorCode.BOUNTY_FUNDS_PAUSED],
+  ['BountyExists',                                  ContractErrorCode.BOUNTY_EXISTS],
+  ['InsufficientFunds',                             ContractErrorCode.INSUFFICIENT_FUNDS],
+
+  // Governance CamelCase patterns
+  ['ExecutionDelayNotMet',                          ContractErrorCode.GOV_EXECUTION_DELAY_NOT_MET],
+  ['ProposalNotApproved',                           ContractErrorCode.GOV_PROPOSAL_NOT_APPROVED],
+  ['VotingStillActive',                             ContractErrorCode.GOV_VOTING_STILL_ACTIVE],
+  ['VotingNotStarted',                              ContractErrorCode.GOV_VOTING_NOT_STARTED],
+  ['VotingEnded',                                   ContractErrorCode.GOV_VOTING_ENDED],
+  ['AlreadyVoted',                                  ContractErrorCode.GOV_ALREADY_VOTED],
+  ['ProposalNotActive',                             ContractErrorCode.GOV_PROPOSAL_NOT_ACTIVE],
+  ['ProposalNotFound',                              ContractErrorCode.GOV_PROPOSAL_NOT_FOUND],
+  ['ProposalExpired',                               ContractErrorCode.GOV_PROPOSAL_EXPIRED],
+  ['InsufficientStake',                             ContractErrorCode.GOV_INSUFFICIENT_STAKE],
+  ['InvalidThreshold',                              ContractErrorCode.GOV_INVALID_THRESHOLD],
+  ['ThresholdTooLow',                               ContractErrorCode.GOV_THRESHOLD_TOO_LOW],
+];
 
 export function getContractErrorMessage(code: ContractErrorCode): string {
   return CONTRACT_ERROR_MESSAGES[code];

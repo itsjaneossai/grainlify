@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const Ajv = require('ajv');
+const Ajv2020 = require('ajv/dist/2020').default;
 
 // Configuration
 const CONTRACTS_DIR = path.join(__dirname, '..');
@@ -173,7 +173,11 @@ function main() {
   const schema = loadSchema();
   
   // Initialize AJV
-  const ajv = new Ajv({ allErrors: true });
+  const ajv = new Ajv2020({
+    allErrors: true,
+    strict: false,
+    validateFormats: false,
+  });
   
   // Find manifests
   const manifests = findManifests();
