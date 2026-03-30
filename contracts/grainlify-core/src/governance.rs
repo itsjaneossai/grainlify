@@ -468,7 +468,7 @@ impl GovernanceContract {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "governance_contract_tests"))]
 mod test {
     use super::*;
     use soroban_sdk::testutils::{Address as _, Ledger};

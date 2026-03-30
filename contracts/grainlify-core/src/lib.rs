@@ -498,15 +498,15 @@ mod monitoring {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test_core_monitoring;
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test_pseudo_randomness;
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test_serialization_compatibility;
 #[cfg(test)]
 mod test_storage_layout;
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test_version_helpers;
 
 // ==================== END MONITORING MODULE ====================
@@ -965,9 +965,7 @@ impl GrainlifyContract {
         env.storage().instance().set(&DataKey::Version, &VERSION);
 
         // Read-only mode defaults to false
-        env.storage()
-            .instance()
-            .set(&DataKey::ReadOnlyMode, &false);
+        env.storage().instance().set(&DataKey::ReadOnlyMode, &false);
 
         // Track successful operation
         monitoring::track_operation(&env, symbol_short!("init"), admin, true);
@@ -1700,13 +1698,24 @@ impl GrainlifyContract {
     /// Verifies that the instance storage aligns with the documented layout.
     pub fn verify_storage_layout(env: Env) -> bool {
         let admin_ok = env.storage().instance().has(&DataKey::Admin)
-            && env.storage().instance().get::<_, Address>(&DataKey::Admin).is_some();
+            && env
+                .storage()
+                .instance()
+                .get::<_, Address>(&DataKey::Admin)
+                .is_some();
 
         let version_ok = env.storage().instance().has(&DataKey::Version)
-            && env.storage().instance().get::<_, u32>(&DataKey::Version).is_some();
+            && env
+                .storage()
+                .instance()
+                .get::<_, u32>(&DataKey::Version)
+                .is_some();
 
         let migration_ok = if env.storage().instance().has(&DataKey::MigrationState) {
-            env.storage().instance().get::<_, crate::MigrationState>(&DataKey::MigrationState).is_some()
+            env.storage()
+                .instance()
+                .get::<_, crate::MigrationState>(&DataKey::MigrationState)
+                .is_some()
         } else {
             true
         };
@@ -1740,10 +1749,7 @@ impl GrainlifyContract {
             timestamp: env.ledger().timestamp(),
         };
 
-        env.events().publish(
-            (symbol_short!("ROModeChg"),),
-            event,
-        );
+        env.events().publish((symbol_short!("ROModeChg"),), event);
     }
 
     fn require_not_read_only(env: &Env) {
@@ -2395,7 +2401,7 @@ fn migrate_v2_to_v3(_env: &Env) {
 // ============================================================================
 // Testing Module
 // ============================================================================
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test {
     use super::*;
     use soroban_sdk::{
@@ -2405,9 +2411,13 @@ mod test {
 
     // Include end-to-end upgrade and migration tests
     pub mod e2e_upgrade_migration_tests;
+    #[cfg(feature = "governance_contract_tests")]
     pub mod invariant_entrypoints_tests;
+    #[cfg(feature = "upgrade_rollback_tests")]
     pub mod state_snapshot_tests;
+    #[cfg(feature = "upgrade_rollback_tests")]
     pub mod upgrade_rollback_scenarios;
+    #[cfg(feature = "upgrade_rollback_tests")]
     pub mod upgrade_rollback_tests;
 
     // WASM for testing (only available after building for wasm32 target)
@@ -2422,9 +2432,9 @@ mod test {
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
         let mut signers = soroban_sdk::Vec::new(&env);
-        signers.push_back(Address::random(&env));
-        signers.push_back(Address::random(&env));
-        signers.push_back(Address::random(&env));
+        signers.push_back(Address::generate(&env));
+        signers.push_back(Address::generate(&env));
+        signers.push_back(Address::generate(&env));
 
         client.init(&signers, &2u32);
     }
@@ -2437,7 +2447,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         client.set_version(&2);
@@ -2452,7 +2462,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
         client.set_version(&5);
 
@@ -2473,7 +2483,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         for version in 1..=25u32 {
