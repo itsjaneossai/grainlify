@@ -88,11 +88,11 @@ fn test_partial_approvals_do_not_carry_across_proposals() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p1, &signers[0]);
     // p1 has 1 approval — below threshold.
 
-    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env));
+    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env), &0u64);
     // p2 has 0 approvals. Approvals on p1 must not help p2.
     client.execute_upgrade(&p2);
 }
@@ -105,7 +105,7 @@ fn test_zero_approvals_not_executable() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.execute_upgrade(&p);
 }
 
@@ -117,7 +117,7 @@ fn test_two_different_signers_meet_threshold() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[1]);
     client.approve_upgrade(&p, &signers[2]);
     // 2-of-3 met by signers[1]+signers[2] (proposer didn't approve)
@@ -132,7 +132,7 @@ fn test_3_of_3_rejects_with_only_two_approvals() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig_custom(&env, 3);
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[0]);
     client.approve_upgrade(&p, &signers[1]);
     // Only 2/3 — must fail.
@@ -147,7 +147,7 @@ fn test_3_of_3_passes_with_all_three_approvals() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig_custom(&env, 3);
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[0]);
     client.approve_upgrade(&p, &signers[1]);
     client.approve_upgrade(&p, &signers[2]);
@@ -162,7 +162,7 @@ fn test_1_of_3_single_approval_sufficient() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig_custom(&env, 1);
 
-    let p = client.propose_upgrade(&signers[2], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[2], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[2]);
     client.execute_upgrade(&p);
 }
@@ -175,7 +175,7 @@ fn test_over_threshold_approval_accepted() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env); // 2-of-3
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[0]);
     client.approve_upgrade(&p, &signers[1]);
     // Already at threshold — third approval should not panic.
@@ -193,9 +193,9 @@ fn test_proposals_store_independent_hashes() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
-    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env));
-    let p3 = client.propose_upgrade(&signers[1], &fake_wasm_v3(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env), &0u64);
+    let p3 = client.propose_upgrade(&signers[1], &fake_wasm_v3(&env), &0u64);
 
     // All three proposals exist independently.
     assert_ne!(p1, p2);
@@ -211,8 +211,8 @@ fn test_executing_one_proposal_leaves_other_unaffected() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
-    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env), &0u64);
 
     // Fully approve p1.
     client.approve_upgrade(&p1, &signers[0]);
@@ -229,9 +229,9 @@ fn test_same_signer_multiple_proposals() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
-    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env));
-    let p3 = client.propose_upgrade(&signers[0], &fake_wasm_v3(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env), &0u64);
+    let p3 = client.propose_upgrade(&signers[0], &fake_wasm_v3(&env), &0u64);
 
     assert!(p1 < p2 && p2 < p3, "IDs must be monotonic");
 }
@@ -371,7 +371,7 @@ fn test_multisig_rollback_proposal_after_failed_upgrade() {
     let version_before = client.get_version();
 
     // Attempt upgrade (will fail at WASM swap)
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p1, &signers[0]);
     client.approve_upgrade(&p1, &signers[1]);
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -382,7 +382,7 @@ fn test_multisig_rollback_proposal_after_failed_upgrade() {
     assert_eq!(client.get_version(), version_before);
 
     // Now propose a "rollback" to the old WASM hash.
-    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env));
+    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env), &0u64);
     assert!(p2 > p1, "rollback proposal gets a new ID");
 
     // Approve rollback proposal
@@ -407,11 +407,11 @@ fn test_sequential_proposals_approvals_isolated() {
     let (client, signers) = setup_multisig(&env);
 
     // Proposal 1: partially approved then abandoned.
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p1, &signers[0]);
 
     // Proposal 2: new proposal, zero approvals. The approval on p1 must not help.
-    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env));
+    let p2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env), &0u64);
     client.approve_upgrade(&p2, &signers[1]); // only 1 approval
     client.execute_upgrade(&p2); // threshold is 2 — must fail
 }
@@ -427,7 +427,7 @@ fn test_failed_multisig_upgrade_no_previous_version() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[0]);
     client.approve_upgrade(&p, &signers[1]);
 
@@ -528,7 +528,7 @@ fn test_many_proposals_coexist() {
     let mut ids = std::vec::Vec::new();
     for i in 0..10u8 {
         let hash = BytesN::from_array(&env, &[i; 32]);
-        let id = client.propose_upgrade(&signers[(i % 3) as usize], &hash);
+        let id = client.propose_upgrade(&signers[(i % 3) as usize], &hash, &0u64);
         ids.push(id);
     }
 
@@ -545,7 +545,7 @@ fn test_approve_after_caught_execute_failure() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let p = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&p, &signers[0]);
     client.approve_upgrade(&p, &signers[1]);
 
@@ -555,7 +555,7 @@ fn test_approve_after_caught_execute_failure() {
     }));
 
     // A new proposal can still be created and approved normally.
-    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env));
+    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env), &0u64);
     client.approve_upgrade(&p2, &signers[0]);
     client.approve_upgrade(&p2, &signers[1]);
     // p2 is now fully approved — would reach WASM swap.

@@ -86,6 +86,7 @@ fn setup_active_program(
     let admin = Address::generate(env);
     let program_id = String::from_str(env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
+    client.publish_program();
     if amount > 0 {
         client.lock_program_funds(&amount);
     }
@@ -275,12 +276,7 @@ fn test_delegate_with_release_permission_can_single_payout_by() {
     let recipient = Address::generate(&env);
     let program_id = String::from_str(&env, "hack-2026");
 
-    client.set_program_delegate(
-        &program_id,
-        &admin,
-        &delegate,
-        &DELEGATE_PERMISSION_RELEASE,
-    );
+    client.set_program_delegate(&program_id, &admin, &delegate, &DELEGATE_PERMISSION_RELEASE);
 
     let updated = client.single_payout_by(&delegate, &recipient, &1_250);
     assert_eq!(updated.remaining_balance, 3_750);
@@ -315,7 +311,7 @@ fn test_metadata_only_delegate_cannot_execute_release() {
         }],
     };
 
-    let updated = client.update_program_metadata(&program_id, &delegate, &metadata);
+    let updated = client.update_program_metadata_by(&delegate, &program_id, &metadata);
     assert_eq!(updated.metadata, metadata);
 
     assert!(client
@@ -331,12 +327,7 @@ fn test_revoked_delegate_cannot_release_program_funds() {
     let recipient = Address::generate(&env);
     let program_id = String::from_str(&env, "hack-2026");
 
-    client.set_program_delegate(
-        &program_id,
-        &admin,
-        &delegate,
-        &DELEGATE_PERMISSION_RELEASE,
-    );
+    client.set_program_delegate(&program_id, &admin, &delegate, &DELEGATE_PERMISSION_RELEASE);
     client.revoke_program_delegate(&program_id, &admin);
 
     assert!(client
@@ -1543,9 +1534,7 @@ fn test_lock_program_funds_with_fees_enabled() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable fees: 2% lock fee (200 basis points)
-    client.set_lock_fee_rate(&200);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(200), &None, &None, &None, &None, &Some(true));
 
     // Lock 100_000: 2% fee = 2_000, net = 98_000
     let data = client.lock_program_funds(&100_000);
@@ -1567,9 +1556,7 @@ fn test_lock_program_funds_multiple_locks_with_fees() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable 1% lock fee (100 basis points)
-    client.set_lock_fee_rate(&100);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(100), &None, &None, &None, &None, &Some(true));
 
     // First lock: 100_000, fee = 1_000, net = 99_000
     client.lock_program_funds(&100_000);
@@ -1593,9 +1580,7 @@ fn test_lock_program_funds_fee_floor_rounding() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable 3% fee (300 basis points)
-    client.set_lock_fee_rate(&300);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(300), &None, &None, &None, &None, &Some(true));
 
     // Lock 10_001: fee = floor(10_001 * 300 / 10_000) = floor(300.03) = 300
     // Net = 10_001 - 300 = 9_701
@@ -1616,9 +1601,7 @@ fn test_lock_program_funds_zero_fee_rate() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Enable fees but set lock_fee_rate to 0
-    client.set_lock_fee_rate(&0);
-    client.set_fees_enabled(&true);
+    client.update_fee_config(&Some(0), &None, &None, &None, &None, &Some(true));
 
     let data = client.lock_program_funds(&100_000);
     assert_eq!(data.remaining_balance, 100_000);
@@ -1637,8 +1620,7 @@ fn test_lock_program_funds_overflow_safety() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // No fees
-    client.set_fees_enabled(&false);
+    client.update_fee_config(&None, &None, &None, &None, &None, &Some(false));
 
     // Lock large amount
     let data = client.lock_program_funds(&safe_val);
@@ -1658,10 +1640,14 @@ fn test_lock_program_funds_fee_recipient_different_from_admin() {
     let program_id = String::from_str(&env, "hack-2026");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
 
-    // Set custom fee recipient
-    client.set_fee_recipient(&fee_recipient);
-    client.set_lock_fee_rate(&200); // 2%
-    client.set_fees_enabled(&true);
+    client.update_fee_config(
+        &Some(200),
+        &None,
+        &None,
+        &None,
+        &Some(fee_recipient.clone()),
+        &Some(true),
+    );
 
     let data = client.lock_program_funds(&100_000);
     assert_eq!(data.remaining_balance, 98_000);
@@ -1669,4 +1655,134 @@ fn test_lock_program_funds_fee_recipient_different_from_admin() {
     // Fee recipient should receive the fee
     assert_eq!(token_client.balance(&fee_recipient), 2_000);
     assert_eq!(token_client.balance(&admin), 0); // Admin receives nothing
+}
+
+// ---------------------------------------------------------------------------
+// Payout Key Rotation — lifecycle tests
+// ---------------------------------------------------------------------------
+
+/// Helper: set up a program and return (client, program_id, payout_key, admin).
+fn setup_rotation_program(
+    env: &Env,
+) -> (
+    ProgramEscrowContractClient<'static>,
+    String,
+    Address,
+    Address,
+) {
+    env.mock_all_auths();
+    let (client, contract_id) = make_client(env);
+    let (_token_client, token_id) = fund_contract(env, &contract_id, 50_000);
+    let admin = Address::generate(env);
+    let payout_key = Address::generate(env);
+    let program_id = String::from_str(env, "rot-prog");
+    client.initialize_contract(&admin);
+    client.init_program(&program_id, &payout_key, &token_id, &payout_key, &None, &None);
+    (client, program_id, payout_key, admin)
+}
+
+/// Happy path: current payout key rotates to a new key.
+#[test]
+fn test_rotation_by_current_payout_key_succeeds() {
+    let env = Env::default();
+    let (client, program_id, _old_key, _admin) = setup_rotation_program(&env);
+    let new_key = Address::generate(&env);
+
+    let nonce = client.get_rotation_nonce(&program_id);
+    assert_eq!(nonce, 0);
+
+    let data = client.rotate_payout_key(&program_id, &_old_key, &new_key, &nonce);
+    assert_eq!(data.authorized_payout_key, new_key);
+
+    // Nonce must have incremented.
+    assert_eq!(client.get_rotation_nonce(&program_id), 1);
+}
+
+/// Happy path: contract admin can rotate the payout key.
+#[test]
+fn test_rotation_by_admin_succeeds() {
+    let env = Env::default();
+    let (client, program_id, _payout_key, admin) = setup_rotation_program(&env);
+    let new_key = Address::generate(&env);
+
+    let nonce = client.get_rotation_nonce(&program_id);
+    let data = client.rotate_payout_key(&program_id, &admin, &new_key, &nonce);
+    assert_eq!(data.authorized_payout_key, new_key);
+    assert_eq!(client.get_rotation_nonce(&program_id), 1);
+}
+
+/// After rotation the new key can immediately perform a payout.
+#[test]
+fn test_new_key_can_payout_after_rotation() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, contract_id) = make_client(&env);
+    let (_token_client, token_id) = fund_contract(&env, &contract_id, 50_000);
+    let admin = Address::generate(&env);
+    let old_key = Address::generate(&env);
+    let new_key = Address::generate(&env);
+    let program_id = String::from_str(&env, "rot-prog");
+    client.initialize_contract(&admin);
+    client.init_program(&program_id, &old_key, &token_id, &old_key, &None, &None);
+    client.lock_program_funds(&50_000);
+
+    let nonce = client.get_rotation_nonce(&program_id);
+    client.rotate_payout_key(&program_id, &old_key, &new_key, &nonce);
+
+    // New key should be able to trigger a payout via the v2 entrypoint.
+    let recipient = Address::generate(&env);
+    let data = client.single_payout_v2(&program_id, &new_key, &recipient, &1_000);
+    assert_eq!(data.remaining_balance, 49_000);
+}
+
+/// Rotation increments nonce; a second rotation with the old nonce must fail.
+#[test]
+#[should_panic(expected = "Invalid nonce")]
+fn test_rotation_replay_rejected() {
+    let env = Env::default();
+    let (client, program_id, old_key, _admin) = setup_rotation_program(&env);
+    let new_key1 = Address::generate(&env);
+    let new_key2 = Address::generate(&env);
+
+    let nonce = client.get_rotation_nonce(&program_id); // 0
+    client.rotate_payout_key(&program_id, &old_key, &new_key1, &nonce);
+
+    // Attempt replay with stale nonce=0 — must panic.
+    client.rotate_payout_key(&program_id, &new_key1, &new_key2, &nonce);
+}
+
+/// Two sequential rotations on the same ledger are allowed (different nonces).
+#[test]
+fn test_rotate_twice_same_ledger_with_correct_nonces() {
+    let env = Env::default();
+    let (client, program_id, old_key, _admin) = setup_rotation_program(&env);
+    let key2 = Address::generate(&env);
+    let key3 = Address::generate(&env);
+
+    let nonce0 = client.get_rotation_nonce(&program_id);
+    client.rotate_payout_key(&program_id, &old_key, &key2, &nonce0);
+
+    let nonce1 = client.get_rotation_nonce(&program_id);
+    let data = client.rotate_payout_key(&program_id, &key2, &key3, &nonce1);
+    assert_eq!(data.authorized_payout_key, key3);
+    assert_eq!(client.get_rotation_nonce(&program_id), 2);
+}
+
+/// Rotating to the same address must be rejected.
+#[test]
+#[should_panic(expected = "New key must differ from current key")]
+fn test_rotate_to_self_rejected() {
+    let env = Env::default();
+    let (client, program_id, payout_key, _admin) = setup_rotation_program(&env);
+    let nonce = client.get_rotation_nonce(&program_id);
+    // Attempt to rotate to the same key.
+    client.rotate_payout_key(&program_id, &payout_key, &payout_key, &nonce);
+}
+
+/// get_rotation_nonce returns 0 for a fresh program.
+#[test]
+fn test_rotation_nonce_starts_at_zero() {
+    let env = Env::default();
+    let (client, program_id, _key, _admin) = setup_rotation_program(&env);
+    assert_eq!(client.get_rotation_nonce(&program_id), 0);
 }

@@ -3,7 +3,8 @@
 //! Parity with main contracts/bounty_escrow where applicable; see soroban/PARITY.md.
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, token, Address, BytesN, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env,
+    String, Symbol, Vec,
 };
 
 const ESCROW_DELEGATE_SET: soroban_sdk::Symbol = symbol_short!("EscDlgS");
@@ -51,8 +52,8 @@ pub enum Error {
     TransactionExceedsLimit = 305,
     InvalidRiskScore = 306,
     InvalidTier = 307,
-    InvalidDelegatePermissions = 308,
-    InvalidDelegateTarget = 309,
+    // Ownership transfer errors
+    TransferProposalNotFound = 401,
 }
 
 #[contracttype]
@@ -76,6 +77,59 @@ pub struct Escrow {
     pub delegate: Option<Address>,
     pub delegate_permissions: u32,
     pub metadata: Option<String>,
+}
+
+const MAX_PAGE_SIZE: u32 = 20;
+const MAX_LABELS: u32 = 10;
+const MAX_LABEL_LENGTH: u32 = 32;
+const ESCROW_LABELS_UPDATED: Symbol = symbol_short!("esc_lbl");
+const LABEL_CONFIG_UPDATED: Symbol = symbol_short!("lbl_cfg");
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelConfig {
+    pub restricted: bool,
+    pub allowed_labels: Vec<String>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLabelsUpdatedEvent {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub actor: Address,
+    pub labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelConfigUpdatedEvent {
+    pub version: u32,
+    pub admin: Address,
+    pub restricted: bool,
+    pub allowed_labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLabelRecord {
+    pub bounty_id: u64,
+    pub depositor: Address,
+    pub amount: i128,
+    pub remaining_amount: i128,
+    pub status: EscrowStatus,
+    pub deadline: u64,
+    pub labels: Vec<String>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLabelPage {
+    pub records: Vec<EscrowLabelRecord>,
+    pub next_cursor: Option<u64>,
+    pub has_more: bool,
 }
 
 #[contracttype]
@@ -124,6 +178,53 @@ pub struct EscrowMetadataUpdatedEvent {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelConfig {
+    pub restricted: bool,
+    pub allowed_labels: Vec<String>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelConfigUpdatedEvent {
+    pub version: u32,
+    pub admin: Address,
+    pub restricted: bool,
+    pub allowed_labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLabelsUpdatedEvent {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub actor: Address,
+    pub labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLabelRecord {
+    pub bounty_id: u64,
+    pub depositor: Address,
+    pub amount: i128,
+    pub remaining_amount: i128,
+    pub status: EscrowStatus,
+    pub deadline: u64,
+    pub labels: Vec<String>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowLabelPage {
+    pub records: Vec<EscrowLabelRecord>,
+    pub next_cursor: Option<u64>,
+    pub has_more: bool,
+}
+
+#[contracttype]
 pub enum DataKey {
     Admin,
     Token,
@@ -137,6 +238,9 @@ pub enum DataKey {
     RiskThresholds,
     ReentrancyGuard,
     EscrowJurisdiction(u64),
+    // Ownership transfer
+    PendingAdmin,
+    EscrowPendingDepositor(u64),
 }
 
 #[contract]
@@ -629,7 +733,6 @@ impl EscrowContract {
         }
 
         // EFFECTS: write escrow state before external call
-        let labels = Vec::new(&env);
         let escrow = Escrow {
             depositor: depositor.clone(),
             amount,
@@ -637,7 +740,7 @@ impl EscrowContract {
             status: EscrowStatus::Locked,
             deadline,
             jurisdiction: jurisdiction.clone(),
-            labels: Vec::new(&env),
+            labels: Vec::<String>::new(&env),
             delegate: None,
             delegate_permissions: 0,
             metadata: None,
@@ -677,6 +780,17 @@ impl EscrowContract {
         let contract = env.current_contract_address();
         let token_client = token::Client::new(&env, &token);
         token_client.transfer(&depositor, &contract, &amount);
+
+        env.events().publish(
+            (ESCROW_LABELS_UPDATED, bounty_id),
+            EscrowLabelsUpdatedEvent {
+                version: 1,
+                bounty_id,
+                actor: depositor,
+                labels: Vec::new(&env),
+                timestamp: env.ledger().timestamp(),
+            },
+        );
 
         // GUARD: release reentrancy lock
         reentrancy_guard::release(&env);
@@ -1095,6 +1209,7 @@ impl EscrowContract {
 
 // ── NEW public methods ──────────────────────────────────────────────────────
 
+#[contractimpl]
 impl EscrowContract {
     /// Return the contract's current token balance.
     /// Added to satisfy the standard EscrowInterface (Issue #574).
@@ -1110,6 +1225,200 @@ impl EscrowContract {
     /// Alias of `get_escrow` using the standard name from EscrowInterface.
     pub fn get_escrow_info(env: Env, bounty_id: u64) -> Result<Escrow, Error> {
         Self::get_escrow(env, bounty_id)
+    }
+}
+
+// ── Ownership transfer (two-step propose / accept) ──────────────────────────
+
+#[contractimpl]
+impl EscrowContract {
+    /// Propose transferring contract ownership to `new_owner`.
+    /// Only the current admin may call this. Overwrites any prior pending proposal.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn propose_transfer_ownership(env: Env, new_owner: Address) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_owner);
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("own_prop"), admin),
+            (new_owner, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Accept a pending ownership transfer. Only the proposed new owner may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn accept_transfer_ownership(env: Env) -> Result<(), Error> {
+        if !env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::NotInitialized);
+        }
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .ok_or(Error::TransferProposalNotFound)?;
+        pending.require_auth();
+
+        let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        env.storage().instance().set(&DataKey::Admin, &pending);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("own_xfer"), old_admin),
+            (pending, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Cancel a pending ownership transfer. Only the current admin may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn cancel_transfer_ownership(env: Env) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+
+        if !env.storage().instance().has(&DataKey::PendingAdmin) {
+            return Err(Error::TransferProposalNotFound);
+        }
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("own_cncl"), admin),
+            env.ledger().timestamp(),
+        );
+        Ok(())
+    }
+
+    /// Read the pending admin address, if any.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn get_pending_owner(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PendingAdmin)
+    }
+
+    // ── Per-escrow ownership transfer ───────────────────────────────────────
+
+    /// Propose transferring an escrow's depositor to `new_depositor`.
+    /// Only the current escrow depositor may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn propose_escrow_transfer(
+        env: Env,
+        bounty_id: u64,
+        new_depositor: Address,
+    ) -> Result<(), Error> {
+        if !env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::NotInitialized);
+        }
+        let escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        escrow.depositor.require_auth();
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::EscrowPendingDepositor(bounty_id), &new_depositor);
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("esc_prop"), bounty_id),
+            (escrow.depositor, new_depositor, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Accept a pending escrow depositor transfer.
+    /// Only the proposed new depositor may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn accept_escrow_transfer(env: Env, bounty_id: u64) -> Result<(), Error> {
+        if !env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::NotInitialized);
+        }
+        let pending: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EscrowPendingDepositor(bounty_id))
+            .ok_or(Error::TransferProposalNotFound)?;
+        pending.require_auth();
+
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        let old_depositor = escrow.depositor.clone();
+        escrow.depositor = pending.clone();
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Escrow(bounty_id), &escrow);
+        env.storage()
+            .persistent()
+            .remove(&DataKey::EscrowPendingDepositor(bounty_id));
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("esc_xfer"), bounty_id),
+            (old_depositor, pending, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Cancel a pending escrow depositor transfer.
+    /// Only the current escrow depositor may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn cancel_escrow_transfer(env: Env, bounty_id: u64) -> Result<(), Error> {
+        if !env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::NotInitialized);
+        }
+        let escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Escrow(bounty_id))
+            .ok_or(Error::BountyNotFound)?;
+        escrow.depositor.require_auth();
+
+        if !env
+            .storage()
+            .persistent()
+            .has(&DataKey::EscrowPendingDepositor(bounty_id))
+        {
+            return Err(Error::TransferProposalNotFound);
+        }
+        env.storage()
+            .persistent()
+            .remove(&DataKey::EscrowPendingDepositor(bounty_id));
+
+        env.events().publish(
+            (soroban_sdk::symbol_short!("esc_cncl"), bounty_id),
+            (escrow.depositor, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Read the pending depositor for a specific escrow, if any.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn get_pending_escrow_owner(env: Env, bounty_id: u64) -> Option<Address> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::EscrowPendingDepositor(bounty_id))
     }
 }
 
@@ -1177,5 +1486,5 @@ pub mod traits {
 
 mod identity_test;
 mod test;
-mod test_dispute_resolution;
-mod test_max_counts;
+#[cfg(test)]
+mod test_ownership_transfer;

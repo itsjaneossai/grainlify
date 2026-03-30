@@ -156,7 +156,7 @@ fn test_max_bounties_duplicate_id_rejected_original_preserved() {
 #[test]
 fn test_max_bounties_lifecycle_no_cross_entry_corruption() {
     let env = Env::default();
-    let (client, _contract_id, admin, depositor, contributor, _token_client) =
+    let (client, _contract_id, _admin, depositor, contributor, _token_client) =
         setup_max(&env, 6_000);
 
     let deadline = env.ledger().timestamp() + 100;

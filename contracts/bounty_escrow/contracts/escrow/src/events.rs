@@ -34,6 +34,9 @@
 use crate::CapabilityAction;
 use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, Symbol};
 
+// Import storage key audit module for shared constants
+use grainlify_contracts::storage_key_audit::{shared, bounty_escrow as be_keys};
+
 // ── Version constant ─────────────────────────────────────────────────────────
 
 /// Canonical event schema version included in **every** event payload.
@@ -41,7 +44,7 @@ use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, Symbol};
 /// Increment this value  and update all emitter functions whenever the
 /// payload schema changes in a breaking way.  Non-breaking additions that is new
 /// optional fields do not require a version bump.
-pub const EVENT_VERSION_V2: u32 = 2;
+pub const EVENT_VERSION_V2: u32 = shared::EVENT_VERSION_V2;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INITIALIZATION EVENTS
@@ -88,7 +91,7 @@ pub struct BountyEscrowInitialized {
 /// # Panics
 /// Never panics; publishing is infallible in Soroban.
 pub fn emit_bounty_initialized(env: &Env, event: BountyEscrowInitialized) {
-    let topics = (symbol_short!("init"),);
+    let topics = (be_keys::BOUNTY_INITIALIZED,);
     env.events().publish(topics, event.clone());
 }
 
@@ -339,10 +342,12 @@ pub enum FeeOperationType {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FeeCollected {
+    pub version: u32,
     pub operation_type: FeeOperationType, // determines if the fee was collected on lock or release.
     pub amount: i128,                     // actual fee amount transferred
     pub fee_rate: i128,                   // fee rate applied in basis points (1 bp = 0.01 %).
-    pub fee_fixed: i128,                  // flat fee component
+    /// Configured flat fee component (smallest units) for this operation type.
+    pub fee_fixed: i128,
     pub recipient: Address,
     pub timestamp: u64, // Ledger timestamp.
 }
@@ -373,6 +378,7 @@ pub fn emit_fee_collected(env: &Env, event: FeeCollected) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct BatchFundsLocked {
+    pub version: u32,
     pub count: u32,         //  numbers of escrows created in this batch.
     pub total_amount: i128, // the sum of all locked amounts in this batch.
     pub timestamp: u64,
@@ -395,6 +401,7 @@ pub fn emit_batch_funds_locked(env: &Env, event: BatchFundsLocked) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FeeConfigUpdated {
+    pub version: u32,
     /// New lock fee rate in basis points.
     pub lock_fee_rate: i128,
     /// New release fee rate in basis points.
@@ -449,6 +456,7 @@ pub fn emit_archived(env: &Env, bounty_id: u64, timestamp: u64) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FeeRoutingUpdated {
+    pub version: u32,
     /// Bounty this routing config applies to.
     pub bounty_id: u64,
     /// Primary treasury recipient.
@@ -481,6 +489,7 @@ pub fn emit_fee_routing_updated(env: &Env, event: FeeRoutingUpdated) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct FeeRouted {
+    pub version: u32,
     /// Bounty this fee was collected for.
     pub bounty_id: u64,
     /// Whether this was a lock or release fee.
@@ -521,6 +530,7 @@ pub fn emit_fee_routed(env: &Env, event: FeeRouted) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct BatchFundsReleased {
+    pub version: u32,
     pub count: u32,
     pub total_amount: i128,
     pub timestamp: u64,
@@ -548,6 +558,7 @@ pub fn emit_batch_funds_released(env: &Env, event: BatchFundsReleased) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct ApprovalAdded {
+    pub version: u32,
     pub bounty_id: u64,       // requiring multisig approval.
     pub contributor: Address, // intended contributor recipient
     pub approver: Address,    // signer who submitted this approval
@@ -842,6 +853,11 @@ pub fn emit_risk_flags_updated(env: &Env, event: RiskFlagsUpdated) {
 /// - The `beneficiary` field allows off-chain indexers to build a
 ///   per-address ticket inbox without scanning all tickets.
 
+pub fn emit_deprecation_state_changed(env: &Env, event: DeprecationStateChanged) {
+    let topics = (symbol_short!("deprec"),);
+    env.events().publish(topics, event);
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NotificationPreferencesUpdated {
@@ -938,6 +954,7 @@ pub fn emit_pause_state_changed(env: &Env, event: crate::PauseStateChanged) {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct EmergencyWithdrawEvent {
+    pub version: u32,
     pub admin: Address,
     pub recipient: Address,
     pub amount: i128,
@@ -973,8 +990,8 @@ pub fn emit_emergency_withdraw(env: &Env, event: EmergencyWithdrawEvent) {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityIssued {
-    /// Unique cryptographically secure capability identifier.
-    pub capability_id: BytesN<32>,
+    /// Monotonic capability id (matches [`crate::DataKey::Capability`]).
+    pub capability_id: u64,
     /// Address that created and vouches for this capability.
     pub owner: Address,
     /// Address authorised to exercise this capability.
@@ -995,7 +1012,7 @@ pub struct CapabilityIssued {
 
 /// Emit [`CapabilityIssued`]
 pub fn emit_capability_issued(env: &Env, event: CapabilityIssued) {
-    let topics = (symbol_short!("cap_new"), event.capability_id.clone());
+    let topics = (symbol_short!("cap_new"), event.capability_id);
     env.events().publish(topics, event);
 }
 
@@ -1019,7 +1036,7 @@ pub fn emit_capability_issued(env: &Env, event: CapabilityIssued) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityUsed {
     /// Capability that was exercised.
-    pub capability_id: BytesN<32>,
+    pub capability_id: u64,
     /// Address that exercised the capability.
     pub holder: Address,
     /// Action that was performed.
@@ -1038,7 +1055,7 @@ pub struct CapabilityUsed {
 
 /// Emit [`CapabilityUsed`]
 pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
-    let topics = (symbol_short!("cap_use"), event.capability_id.clone());
+    let topics = (symbol_short!("cap_use"), event.capability_id);
     env.events().publish(topics, event);
 }
 
@@ -1061,56 +1078,90 @@ pub fn emit_capability_used(env: &Env, event: CapabilityUsed) {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityRevoked {
     /// Capability that was revoked
-    pub capability_id: BytesN<32>,
+    pub capability_id: u64,
     pub owner: Address,
     pub revoked_at: u64,
 }
 
 /// Emit [`CapabilityRevoked`]
 pub fn emit_capability_revoked(env: &Env, event: CapabilityRevoked) {
-    let topics = (symbol_short!("cap_rev"), event.capability_id.clone());
+    let topics = (symbol_short!("cap_rev"), event.capability_id);
     env.events().publish(topics, event);
 }
 
-/// Emitted when an operation's measured resource usage approaches the
-/// configured cap (at or above `WARNING_THRESHOLD_BPS / 10_000` of the cap).
-/// Only emitted in test / testutils builds; see `gas_budget` module docs.
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXPIRY, CLEANUP, ARCHIVE, GAS BUDGET
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Emitted when the admin updates [`crate::ExpiryConfig`].
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GasBudgetCapApproached {
-    /// Canonical operation symbol (e.g. `symbol_short!("lock")`).
-    pub operation: Symbol,
-    /// Measured CPU instructions consumed by this call.
-    pub cpu_used: u64,
-    /// Measured memory bytes consumed by this call.
-    pub mem_used: u64,
-    /// Configured CPU instruction cap (`0` = uncapped).
-    pub cpu_cap: u64,
-    /// Configured memory byte cap (`0` = uncapped).
-    pub mem_cap: u64,
-    /// The warning threshold that was crossed, in basis points.
-    pub threshold_bps: u32,
-    /// Ledger timestamp at the time of the check.
+#[derive(Clone, Debug)]
+pub struct ExpiryConfigUpdated {
+    pub default_expiry_duration: u64,
+    pub auto_cleanup_enabled: bool,
+    pub admin: Address,
     pub timestamp: u64,
 }
 
-/// Emitted when an operation's measured resource usage exceeds the configured
-/// cap. When `GasBudgetConfig::enforce` is `true` this accompanies a
-/// transaction revert. Only emitted in test / testutils builds.
+pub fn emit_expiry_config_updated(env: &Env, event: ExpiryConfigUpdated) {
+    let topics = (symbol_short!("exp_cfg"),);
+    env.events().publish(topics, event.clone());
+}
+
+/// Emitted when an escrow is marked [`crate::EscrowStatus::Expired`].
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+pub struct EscrowExpired {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub creation_timestamp: u64,
+    pub expiry: u64,
+    pub remaining_amount: i128,
+    pub timestamp: u64,
+}
+
+pub fn emit_escrow_expired(env: &Env, event: EscrowExpired) {
+    let topics = (symbol_short!("expired"), event.bounty_id);
+    env.events().publish(topics, event.clone());
+}
+
+/// Emitted when an expired escrow record is removed from storage.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct EscrowCleanedUp {
+    pub version: u32,
+    pub bounty_id: u64,
+    pub cleaned_by: Address,
+    pub timestamp: u64,
+}
+
+pub fn emit_escrow_cleaned_up(env: &Env, event: EscrowCleanedUp) {
+    let topics = (symbol_short!("cln_up"), event.bounty_id);
+    env.events().publish(topics, event.clone());
+}
+
+/// Published when a measured operation exceeds its configured CPU or memory cap.
+#[contracttype]
+#[derive(Clone, Debug)]
 pub struct GasBudgetCapExceeded {
-    /// Canonical operation symbol (e.g. `symbol_short!("lock")`).
     pub operation: Symbol,
-    /// Measured CPU instructions consumed by this call.
     pub cpu_used: u64,
-    /// Measured memory bytes consumed by this call.
     pub mem_used: u64,
-    /// Configured CPU instruction cap (`0` = uncapped).
     pub cpu_cap: u64,
-    /// Configured memory byte cap (`0` = uncapped).
     pub mem_cap: u64,
-    /// Ledger timestamp at the time of the check.
+    pub timestamp: u64,
+}
+
+/// Published when usage approaches the configured cap (advisory).
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct GasBudgetCapApproached {
+    pub operation: Symbol,
+    pub cpu_used: u64,
+    pub mem_used: u64,
+    pub cpu_cap: u64,
+    pub mem_cap: u64,
+    pub threshold_bps: u32,
     pub timestamp: u64,
 }
 
@@ -1125,7 +1176,7 @@ pub struct GasBudgetCapExceeded {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"timelock_cfg"` |
+/// | 0 | `"tl_cfg"` (short symbol; Soroban topic limit 9 chars) |
 ///
 /// ### Data fields
 /// | Field | Type | Description |
@@ -1147,7 +1198,7 @@ pub struct TimelockConfigured {
 
 /// Emit [`TimelockConfigured`].
 pub fn emit_timelock_configured(env: &Env, event: TimelockConfigured) {
-    let topics = (symbol_short!("tmlk_cfg"),);
+    let topics = (symbol_short!("tl_cfg"),);
     env.events().publish(topics, event);
 }
 
@@ -1158,7 +1209,7 @@ pub fn emit_timelock_configured(env: &Env, event: TimelockConfigured) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"act_prop"` |
+/// | 0 | `"adm_prp"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1181,7 +1232,7 @@ pub struct AdminActionProposed {
 
 /// Emit [`AdminActionProposed`].
 pub fn emit_admin_action_proposed(env: &Env, event: AdminActionProposed) {
-    let topics = (symbol_short!("act_prop"),);
+    let topics = (symbol_short!("adm_prp"),);
     env.events().publish(topics, event);
 }
 
@@ -1192,7 +1243,7 @@ pub fn emit_admin_action_proposed(env: &Env, event: AdminActionProposed) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"act_exec"` |
+/// | 0 | `"adm_exe"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1213,7 +1264,7 @@ pub struct AdminActionExecuted {
 
 /// Emit [`AdminActionExecuted`].
 pub fn emit_admin_action_executed(env: &Env, event: AdminActionExecuted) {
-    let topics = (symbol_short!("act_exec"),);
+    let topics = (symbol_short!("adm_exe"),);
     env.events().publish(topics, event);
 }
 
@@ -1224,7 +1275,7 @@ pub fn emit_admin_action_executed(env: &Env, event: AdminActionExecuted) {
 /// ### Topics
 /// | Index | Value |
 /// |-------|-------|
-/// | 0 | `"act_cncl"` |
+/// | 0 | `"adm_can"` |
 /// | 1 | `action_id: u64` |
 ///
 /// ### Data fields
@@ -1245,6 +1296,90 @@ pub struct AdminActionCancelled {
 
 /// Emit [`AdminActionCancelled`].
 pub fn emit_admin_action_cancelled(env: &Env, event: AdminActionCancelled) {
-    let topics = (symbol_short!("act_cncl"),);
+    let topics = (symbol_short!("adm_can"),);
+    env.events().publish(topics, event);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECURRING LOCK EVENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Payload for the [`emit_recurring_lock_created`] event.
+///
+/// Emitted when a depositor creates a new recurring (subscription-style) lock schedule.
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"rl_create"` |
+/// | 1 | `recurring_id: u64` |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockCreated {
+    pub version: u32,
+    pub recurring_id: u64,
+    pub bounty_id: u64,
+    pub depositor: Address,
+    pub amount_per_period: i128,
+    pub period: u64,
+    pub timestamp: u64,
+}
+
+/// Emit [`RecurringLockCreated`].
+pub fn emit_recurring_lock_created(env: &Env, event: RecurringLockCreated) {
+    let topics = (symbol_short!("rl_creat"), event.recurring_id);
+    env.events().publish(topics, event);
+}
+
+/// Payload for the [`emit_recurring_lock_executed`] event.
+///
+/// Emitted each time a recurring lock period is executed and funds are locked.
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"rl_exec"` |
+/// | 1 | `recurring_id: u64` |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockExecuted {
+    pub version: u32,
+    pub recurring_id: u64,
+    pub bounty_id: u64,
+    pub amount_locked: i128,
+    pub cumulative_locked: i128,
+    pub execution_count: u32,
+    pub timestamp: u64,
+}
+
+/// Emit [`RecurringLockExecuted`].
+pub fn emit_recurring_lock_executed(env: &Env, event: RecurringLockExecuted) {
+    let topics = (symbol_short!("rl_exec"), event.recurring_id);
+    env.events().publish(topics, event);
+}
+
+/// Payload for the [`emit_recurring_lock_cancelled`] event.
+///
+/// Emitted when a depositor cancels their recurring lock schedule.
+///
+/// ### Topics
+/// | Index | Value |
+/// |-------|-------|
+/// | 0 | `"rl_cncl"` |
+/// | 1 | `recurring_id: u64` |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecurringLockCancelled {
+    pub version: u32,
+    pub recurring_id: u64,
+    pub cancelled_by: Address,
+    pub cumulative_locked: i128,
+    pub execution_count: u32,
+    pub timestamp: u64,
+}
+
+/// Emit [`RecurringLockCancelled`].
+pub fn emit_recurring_lock_cancelled(env: &Env, event: RecurringLockCancelled) {
+    let topics = (symbol_short!("rl_cncl"), event.recurring_id);
     env.events().publish(topics, event);
 }

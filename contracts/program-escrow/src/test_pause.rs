@@ -46,6 +46,7 @@ fn setup_program_with_admin<'a>(
         &None,
         &None,
     );
+    client.publish_program();
     (client, admin, payout_key, token_client)
 }
 
@@ -356,6 +357,7 @@ fn setup_rbac_program_env_strict<'a>(
     let depositor = Address::generate(env);
     token_admin_client.mint(&depositor, &1000);
     token_client.transfer(&depositor, &contract_client.address, &500);
+    contract_client.publish_program();
     contract_client.lock_program_funds(&500);
 
     // Now reset auths - subsequent operations need proper auth
@@ -398,6 +400,7 @@ fn setup_rbac_program_env<'a>(
     let depositor = Address::generate(env);
     token_admin_client.mint(&depositor, &1000);
     token_client.transfer(&depositor, &contract_client.address, &500);
+    contract_client.publish_program();
     contract_client.lock_program_funds(&500);
 
     (admin, operator, token_client, contract_client)
@@ -586,6 +589,7 @@ fn test_rbac_emergency_withdraw_drains_all_funds() {
         &None,
         &None,
     );
+    contract_client.publish_program();
 
     // let program_id_2 = String::from_str(&env, "prog-2");
     // contract_client.init_program(&program_id_2, &operator, &token_address, &admin, &None, &None);

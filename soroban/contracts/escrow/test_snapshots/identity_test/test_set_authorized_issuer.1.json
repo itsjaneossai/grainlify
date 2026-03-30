@@ -83,7 +83,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "bytes": "4bec5c9dcb95eb9a41242cb9d0b860bce19543db650d8239301d163d7cafaca2"
+                  "bytes": "3a9b5660990a147c09c0bb79e0c73e04333303af871774125ea4b2950a0bd9d3"
                 },
                 {
                   "bool": true
@@ -108,7 +108,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "bytes": "6e8b1969cf60ce76bef5ec38266d681e22269d1ce694b260e0635779c5349e38"
+                  "bytes": "fb4b6c030266d8b7a380e810545868582f2bae17b4686a4ee6b2c34d6f288d4b"
                 },
                 {
                   "bool": false
@@ -133,7 +133,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "bytes": "6e8b1969cf60ce76bef5ec38266d681e22269d1ce694b260e0635779c5349e38"
+                  "bytes": "fb4b6c030266d8b7a380e810545868582f2bae17b4686a4ee6b2c34d6f288d4b"
                 },
                 {
                   "bool": true
@@ -253,7 +253,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "bytes": "6e8b1969cf60ce76bef5ec38266d681e22269d1ce694b260e0635779c5349e38"
+                  "bytes": "fb4b6c030266d8b7a380e810545868582f2bae17b4686a4ee6b2c34d6f288d4b"
                 }
               }
             },

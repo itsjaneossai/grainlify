@@ -310,6 +310,25 @@ deploy_contract() {
     file_hash=$(get_file_hash "$WASM_FILE")
     log_info "WASM file hash: $file_hash"
 
+    # Strict mode safety check
+    if [[ "${STRICT_MODE:-false}" == "true" && "$NETWORK" == "mainnet" ]]; then
+        log_error "=========================================="
+        log_error "  STRICT MODE IS ENABLED ON MAINNET"
+        log_error "=========================================="
+        log_error "Strict mode adds extra invariant checks and diagnostic events"
+        log_error "that consume additional gas. It must be disabled for mainnet."
+        log_error ""
+        log_error "Set STRICT_MODE=\"false\" in your mainnet config or rebuild"
+        log_error "without --features strict-mode."
+        exit 1
+    fi
+
+    if [[ "${STRICT_MODE:-false}" == "true" ]]; then
+        log_info "Strict mode: ENABLED (extra invariant checks active)"
+    else
+        log_info "Strict mode: disabled (production build)"
+    fi
+
     # Mainnet safety check
     if [[ "$NETWORK" == "mainnet" ]]; then
         log_warn "=========================================="

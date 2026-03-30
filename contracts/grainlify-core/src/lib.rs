@@ -15,10 +15,12 @@ use soroban_sdk::{
 #[cfg(test)]
 use soroban_sdk::testutils::Address as _;
 pub mod asset;
+pub mod commit_reveal;
 pub mod errors;
 mod governance;
 pub mod nonce;
 pub mod pseudo_randomness;
+pub mod strict_mode;
 
 pub use governance::{GovernanceConfig, Proposal, ProposalStatus, Vote, VoteType, VotingScheme};
 
@@ -63,6 +65,15 @@ pub struct UpgradeEvent {
 /// metadata is stored in instance storage under the same stable `proposal_id`.
 /// `proposer` is optional to preserve compatibility with older proposal rows
 /// that predate explicit proposer storage.
+///
+/// # Expiry Semantics
+/// `expiry == 0` means the proposal never expires. When `expiry > 0` and the
+/// current ledger timestamp is at or past that value, the proposal is considered
+/// expired and can no longer be approved or executed.
+///
+/// # Cancellation Semantics
+/// `cancelled == true` means a signer has explicitly revoked the proposal.
+/// Cancelled proposals can never be re-activated or executed.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpgradeProposalRecord {
@@ -72,6 +83,10 @@ pub struct UpgradeProposalRecord {
     pub proposer: Option<Address>,
     /// WASM hash that will be installed if the proposal executes.
     pub wasm_hash: BytesN<32>,
+    /// Expiry ledger timestamp (seconds). `0` means no expiry.
+    pub expiry: u64,
+    /// Whether the proposal was explicitly cancelled by a signer.
+    pub cancelled: bool,
 }
 
 // ==================== MONITORING MODULE ====================
@@ -494,12 +509,25 @@ mod monitoring {
     }
 
     pub fn verify_invariants(env: &Env) -> bool {
-        check_invariants(env).healthy
+        let report = check_invariants(env);
+        #[cfg(feature = "strict-mode")]
+        {
+            if !report.healthy {
+                use soroban_sdk::symbol_short;
+                env.events().publish(
+                    (symbol_short!("strict"), symbol_short!("inv_fail")),
+                    report.violation_count,
+                );
+            }
+        }
+        report.healthy
     }
 }
 
 #[cfg(test)]
 mod test_core_monitoring;
+#[cfg(test)]
+mod test_strict_mode;
 #[cfg(test)]
 mod test_pseudo_randomness;
 #[cfg(test)]
@@ -532,6 +560,8 @@ pub struct GrainlifyContract;
 /// * `PreviousVersion` - Tracks previous version for rollback support
 /// * `ChainId` - Stores the chain identifier for cross-network protection
 /// * `NetworkId` - Stores the network identifier for environment-specific behavior
+/// * `TimelockDelay` - Stores the timelock delay period for upgrade execution
+/// * `UpgradeTimelock` - Stores the timelock start time for upgrade proposals
 ///
 /// # Storage Type
 /// Instance storage - Persists across contract upgrades. This is critical for maintaining
@@ -555,6 +585,7 @@ pub struct GrainlifyContract;
 /// - Admin address (Admin key) is immutable after initialization
 /// - Migration state prevents replayed or duplicated migrations
 /// - All storage operations are admin-only or derived from admin authorization
+/// - Timelock delay prevents immediate execution after threshold approval
 #[contracttype]
 #[derive(Clone)]
 enum DataKey {
@@ -624,6 +655,18 @@ enum DataKey {
 
     /// Read-only mode flag — blocks all state-mutating entrypoints
     ReadOnlyMode,
+
+    /// Timelock delay period for upgrade execution (in seconds)
+    /// - Default: 24 hours (86400 seconds) if not set
+    /// - Can be adjusted by admin only
+    /// - Applies to all upgrade proposals
+    TimelockDelay,
+
+    /// Timelock start time for upgrade proposals
+    /// - Records when proposal threshold was met
+    /// - Used to enforce delay before execution
+    /// - proposal_id -> timestamp mapping
+    UpgradeTimelock(u64),
 }
 
 // ============================================================================
@@ -647,6 +690,13 @@ enum DataKey {
 const VERSION: u32 = 2;
 pub const STORAGE_SCHEMA_VERSION: u32 = 1;
 const CONFIG_SNAPSHOT_LIMIT: u32 = 20;
+
+/// Default timelock delay for upgrade execution (24 hours in seconds)
+/// 
+/// This delay provides a security window where users can review
+/// upgrade proposals and prepare for potential emergencies.
+/// The delay can be adjusted by admin via `set_timelock_delay()`.
+const DEFAULT_TIMELOCK_DELAY: u64 = 86400; // 24 hours
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -857,7 +907,7 @@ pub struct ReadOnlyModeEvent {
 /// use soroban_sdk::{Address, Env};
 ///
 /// let env = Env::default();
-/// let admin = Address::random(&env);
+/// let admin = Address::generate(&env);
 ///
 /// // Initialize contract
 /// contract.init(&env, &admin);
@@ -965,9 +1015,7 @@ impl GrainlifyContract {
         env.storage().instance().set(&DataKey::Version, &VERSION);
 
         // Read-only mode defaults to false
-        env.storage()
-            .instance()
-            .set(&DataKey::ReadOnlyMode, &false);
+        env.storage().instance().set(&DataKey::ReadOnlyMode, &false);
 
         // Track successful operation
         monitoring::track_operation(&env, symbol_short!("init"), admin, true);
@@ -975,6 +1023,17 @@ impl GrainlifyContract {
         // Track performance
         let duration = env.ledger().timestamp().saturating_sub(start);
         monitoring::emit_performance(&env, symbol_short!("init"), duration);
+
+        // Strict mode: verify post-initialization invariants
+        strict_mode::strict_assert(
+            contract_is_initialized(&env),
+            "Strict mode: contract not initialized after init_admin",
+        );
+        strict_mode::strict_emit(
+            &env,
+            symbol_short!("init"),
+            symbol_short!("ok"),
+        );
     }
 
     /// Initializes the contract with governance-augmented setup.
@@ -1027,7 +1086,7 @@ impl GrainlifyContract {
     /// use grainlify_core::{GovernanceConfig, VotingScheme};
     ///
     /// let env = Env::default();
-    /// let admin = Address::random(&env);
+    /// let admin = Address::generate(&env);
     ///
     /// let gov_config = GovernanceConfig {
     ///     voting_period: 86400,        // 24 hours
@@ -1113,9 +1172,9 @@ impl GrainlifyContract {
     ///
     /// # Proposal Lifecycle
     /// 1. Allocates a fresh, monotonic proposal identifier from [`MultiSig`].
-    /// 2. Stores the upgrade metadata (`wasm_hash`, `proposer`) under that id.
-    /// 3. Returns the identifier for later calls to [`approve_upgrade`] and
-    ///    [`execute_upgrade`].
+    /// 2. Stores the upgrade metadata (`wasm_hash`, `proposer`, `expiry`) under that id.
+    /// 3. Returns the identifier for later calls to [`approve_upgrade`],
+    ///    [`execute_upgrade`], and [`cancel_upgrade`].
     ///
     /// Proposal identifiers are stable and never intentionally reused. This
     /// function panics if a freshly allocated id would overwrite existing
@@ -1123,13 +1182,15 @@ impl GrainlifyContract {
     ///
     /// # Arguments
     /// * `env` - The contract environment
-    /// * `proposer` - Address proposing the upgrade
+    /// * `proposer` - Address proposing the upgrade (must be a multisig signer)
     /// * `wasm_hash` - Hash of the new WASM code
+    /// * `expiry` - Ledger timestamp (seconds) after which the proposal expires
+    ///   and can no longer be approved or executed. Pass `0` for no expiry.
     ///
     /// # Returns
     /// * `u64` - The proposal ID
-    pub fn propose_upgrade(env: Env, proposer: Address, wasm_hash: BytesN<32>) -> u64 {
-        let proposal_id = MultiSig::propose(&env, proposer.clone());
+    pub fn propose_upgrade(env: Env, proposer: Address, wasm_hash: BytesN<32>, expiry: u64) -> u64 {
+        let proposal_id = MultiSig::propose(&env, proposer.clone(), expiry);
 
         if env
             .storage()
@@ -1162,8 +1223,59 @@ impl GrainlifyContract {
     ///
     /// The `proposal_id` must be the stable identifier returned by
     /// [`propose_upgrade`]. Approval state is maintained by [`MultiSig`].
+    ///
+    /// # Panics
+    /// - If the proposal has expired (ledger time >= expiry and expiry != 0).
+    /// - If the proposal has been cancelled.
     pub fn approve_upgrade(env: Env, proposal_id: u64, signer: Address) {
         MultiSig::approve(&env, proposal_id, signer);
+        
+        // Check if this approval met the threshold and timelock should start
+        if MultiSig::can_execute(&env, proposal_id) {
+            let current_time = env.ledger().timestamp();
+            
+            // Only set timelock if not already set (idempotent)
+            if !env.storage().instance().has(&DataKey::UpgradeTimelock(proposal_id)) {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::UpgradeTimelock(proposal_id), &current_time);
+                
+                // Emit timelock start event
+                env.events().publish(
+                    (symbol_short!("timelock"), symbol_short!("started")),
+                    (proposal_id, current_time)
+                );
+            }
+        }
+    }
+
+    /// Cancels a pending upgrade proposal.
+    ///
+    /// Any signer may cancel a proposal that has not yet been executed.
+    /// Cancellation is irreversible — a cancelled proposal can never be
+    /// re-activated or executed. This prevents stale WASM hashes from
+    /// accumulating as potential attack surface after a governance deadline.
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `proposal_id` - The ID of the upgrade proposal to cancel
+    /// * `canceller` - A signer requesting cancellation (requires auth)
+    ///
+    /// # Panics
+    /// - If `canceller` is not in the multisig signer set.
+    /// - If the proposal does not exist.
+    /// - If the proposal has already been executed.
+    /// - If the proposal has already been cancelled.
+    ///
+    /// # Events
+    /// Emits `("cancelled",)` → `(proposal_id, canceller)` on success.
+    pub fn cancel_upgrade(env: Env, proposal_id: u64, canceller: Address) {
+        // Verify the upgrade proposal record exists before delegating to multisig.
+        if Self::load_upgrade_proposal(&env, proposal_id).is_none() {
+            panic!("Upgrade proposal not found");
+        }
+
+        MultiSig::cancel(&env, proposal_id, canceller);
     }
 
     /// Returns the upgrade proposal metadata stored for `proposal_id`.
@@ -1173,6 +1285,88 @@ impl GrainlifyContract {
     /// multisig proposal identifier.
     pub fn get_upgrade_proposal(env: Env, proposal_id: u64) -> Option<UpgradeProposalRecord> {
         Self::load_upgrade_proposal(&env, proposal_id)
+    }
+    
+    /// Returns the current timelock delay period for upgrade execution.
+    ///
+    /// # Returns
+    /// * `u64` - Current timelock delay in seconds (default: 86400 = 24 hours)
+    ///
+    /// # Security Note
+    /// This is a view function and requires no authorization.
+    pub fn get_timelock_delay(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TimelockDelay)
+            .unwrap_or(DEFAULT_TIMELOCK_DELAY)
+    }
+    
+    /// Sets the timelock delay period for upgrade execution (admin only).
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `delay_seconds` - New delay period in seconds (minimum: 3600 = 1 hour)
+    ///
+    /// # Authorization
+    /// Only admin can call this function.
+    ///
+    /// # Security Considerations
+    /// - Minimum delay of 1 hour prevents immediate upgrades
+    /// - Can be increased but not decreased below minimum for security
+    /// - Changes apply to future proposals only
+    ///
+    /// # Events
+    /// Emits timelock delay change event for transparency.
+    pub fn set_timelock_delay(env: Env, delay_seconds: u64) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        
+        Self::require_not_read_only(&env);
+        
+        // Enforce minimum delay of 1 hour for security
+        if delay_seconds < 3600 {
+            panic!("Timelock delay must be at least 1 hour (3600 seconds)");
+        }
+        
+        let old_delay = Self::get_timelock_delay(env.clone());
+        env.storage()
+            .instance()
+            .set(&DataKey::TimelockDelay, &delay_seconds);
+        
+        // Emit configuration change event
+        env.events().publish(
+            (symbol_short!("timelock"), symbol_short!("delay_changed")),
+            (old_delay, delay_seconds)
+        );
+    }
+    
+    /// Returns the timelock status for an upgrade proposal.
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `proposal_id` - The ID of the upgrade proposal
+    ///
+    /// # Returns
+    /// * `Option<u64>` - Some(remaining_seconds) if timelock is active, None if not started
+    ///
+    /// # Usage
+    /// - None: Timelock not started (threshold not met)
+    /// - Some(0): Timelock completed, ready to execute
+    /// - Some(n): N seconds remaining before execution
+    pub fn get_timelock_status(env: Env, proposal_id: u64) -> Option<u64> {
+        if let Some(timelock_start) = env.storage().instance().get(&DataKey::UpgradeTimelock(proposal_id)) {
+            let timelock_delay = Self::get_timelock_delay(env.clone());
+            let current_time = env.ledger().timestamp();
+            let elapsed = current_time.saturating_sub(timelock_start);
+            
+            if elapsed >= timelock_delay {
+                Some(0) // Ready to execute
+            } else {
+                Some(timelock_delay.saturating_sub(elapsed)) // Remaining time
+            }
+        } else {
+            None // Timelock not started
+        }
     }
 
     /// Upgrades the contract to new WASM code.
@@ -1278,6 +1472,12 @@ impl GrainlifyContract {
     /// (collected via [`approve_upgrade`]) acts as the authorization gate.
     /// Panics with `"Threshold not met"` if quorum has not been reached.
     ///
+    /// # Expiry / Cancellation
+    /// Panics with `"Proposal expired"` if the proposal's deadline has passed.
+    /// Panics with `"Proposal cancelled"` if the proposal was explicitly cancelled.
+    /// This ensures stale WASM hashes from lapsed governance windows can never
+    /// be executed.
+    ///
     /// # Events
     /// Emits `("upgrade", "wasm")` → [`UpgradeEvent`] on success.
     ///
@@ -1299,6 +1499,28 @@ impl GrainlifyContract {
             panic!("Contract state inconsistent - upgrade blocked");
         }
 
+        // Reject cancelled proposals before any further checks.
+        if MultiSig::is_cancelled(&env, proposal_id) {
+            monitoring::track_operation(
+                &env,
+                Symbol::new(&env, "execute_upgrade"),
+                env.current_contract_address(),
+                false,
+            );
+            panic!("Proposal cancelled");
+        }
+
+        // Reject expired proposals — stale WASM hashes must not be executable.
+        if MultiSig::is_expired(&env, proposal_id) {
+            monitoring::track_operation(
+                &env,
+                Symbol::new(&env, "execute_upgrade"),
+                env.current_contract_address(),
+                false,
+            );
+            panic!("Proposal expired");
+        }
+
         // Verify proposal exists and has sufficient approvals
         if !MultiSig::can_execute(&env, proposal_id) {
             monitoring::track_operation(
@@ -1308,6 +1530,33 @@ impl GrainlifyContract {
                 false,
             );
             panic!("Threshold not met or proposal not executable");
+        }
+        
+        // Enforce timelock delay
+        let timelock_start: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::UpgradeTimelock(proposal_id))
+            .unwrap_or_else(|| panic!("Timelock not started - call approve_upgrade first"));
+        
+        let timelock_delay: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TimelockDelay)
+            .unwrap_or(DEFAULT_TIMELOCK_DELAY);
+        
+        let current_time = env.ledger().timestamp();
+        let elapsed = current_time.saturating_sub(timelock_start);
+        
+        if elapsed < timelock_delay {
+            let remaining = timelock_delay.saturating_sub(elapsed);
+            monitoring::track_operation(
+                &env,
+                Symbol::new(&env, "execute_upgrade"),
+                env.current_contract_address(),
+                false,
+            );
+            panic!("Timelock delay not met: {} seconds remaining", remaining);
         }
 
         let proposal =
@@ -1336,6 +1585,11 @@ impl GrainlifyContract {
 
         // Mark proposal as executed (prevents re-execution)
         MultiSig::mark_executed(&env, proposal_id);
+        
+        // Clean up timelock data
+        env.storage()
+            .instance()
+            .remove(&DataKey::UpgradeTimelock(proposal_id));
 
         // Track successful operation
         monitoring::track_operation(
@@ -1366,10 +1620,17 @@ impl GrainlifyContract {
             .instance()
             .get(&DataKey::UpgradeProposalProposer(proposal_id));
 
+        // Pull expiry and cancelled state from the underlying multisig Proposal.
+        let (expiry, cancelled) = MultiSig::get_proposal_opt(env, proposal_id)
+            .map(|p| (p.expiry, p.cancelled))
+            .unwrap_or((0, false));
+
         Some(UpgradeProposalRecord {
             proposal_id,
             proposer,
             wasm_hash,
+            expiry,
+            cancelled,
         })
     }
 
@@ -1406,6 +1667,21 @@ impl GrainlifyContract {
 
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         let start = env.ledger().timestamp();
+
+        // Strict mode: verify invariants before upgrade
+        #[cfg(feature = "strict-mode")]
+        {
+            let report = monitoring::check_invariants(&env);
+            strict_mode::strict_assert(
+                report.healthy,
+                "Strict mode: contract invariants unhealthy before upgrade",
+            );
+            strict_mode::strict_emit(
+                &env,
+                symbol_short!("upgrade"),
+                symbol_short!("pre_chk"),
+            );
+        }
 
         // Verify admin is set (contract initialized).
         // Panics with ContractError::NotInitialized if admin key is absent.
@@ -1493,6 +1769,14 @@ impl GrainlifyContract {
     /// Very Low - Single storage read
     pub fn get_version(env: Env) -> u32 {
         env.storage().instance().get(&DataKey::Version).unwrap_or(0)
+    }
+
+    /// Returns `true` when this contract was compiled with `strict-mode` enabled.
+    ///
+    /// Operators and deployment scripts can call this after deployment to verify
+    /// that dev/staging builds have strict checks active and mainnet builds do not.
+    pub fn is_strict_mode(_env: Env) -> bool {
+        strict_mode::is_enabled()
     }
 
     /// Returns the semantic version string decoded from the stored numeric encoding.
@@ -1700,13 +1984,24 @@ impl GrainlifyContract {
     /// Verifies that the instance storage aligns with the documented layout.
     pub fn verify_storage_layout(env: Env) -> bool {
         let admin_ok = env.storage().instance().has(&DataKey::Admin)
-            && env.storage().instance().get::<_, Address>(&DataKey::Admin).is_some();
+            && env
+                .storage()
+                .instance()
+                .get::<_, Address>(&DataKey::Admin)
+                .is_some();
 
         let version_ok = env.storage().instance().has(&DataKey::Version)
-            && env.storage().instance().get::<_, u32>(&DataKey::Version).is_some();
+            && env
+                .storage()
+                .instance()
+                .get::<_, u32>(&DataKey::Version)
+                .is_some();
 
         let migration_ok = if env.storage().instance().has(&DataKey::MigrationState) {
-            env.storage().instance().get::<_, crate::MigrationState>(&DataKey::MigrationState).is_some()
+            env.storage()
+                .instance()
+                .get::<_, crate::MigrationState>(&DataKey::MigrationState)
+                .is_some()
         } else {
             true
         };
@@ -1740,10 +2035,7 @@ impl GrainlifyContract {
             timestamp: env.ledger().timestamp(),
         };
 
-        env.events().publish(
-            (symbol_short!("ROModeChg"),),
-            event,
-        );
+        env.events().publish((symbol_short!("ROModeChg"),), event);
     }
 
     fn require_not_read_only(env: &Env) {
@@ -1847,6 +2139,118 @@ impl GrainlifyContract {
             }
         }
         snapshots
+    }
+
+    /// Retrieves a specific configuration snapshot by ID.
+    pub fn get_config_snapshot(env: Env, snapshot_id: u64) -> Option<CoreConfigSnapshot> {
+        env.storage()
+            .instance()
+            .get(&DataKey::ConfigSnapshot(snapshot_id))
+    }
+
+    /// Retrieves the most recently created configuration snapshot.
+    pub fn get_latest_config_snapshot(env: Env) -> Option<CoreConfigSnapshot> {
+        let index: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SnapshotIndex)
+            .unwrap_or(Vec::new(&env));
+        if index.is_empty() {
+            return None;
+        }
+        let latest_id = index.get(index.len() - 1).unwrap();
+        env.storage()
+            .instance()
+            .get(&DataKey::ConfigSnapshot(latest_id))
+    }
+
+    /// Returns the number of currently retained configuration snapshots.
+    pub fn get_snapshot_count(env: Env) -> u32 {
+        let index: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SnapshotIndex)
+            .unwrap_or(Vec::new(&env));
+        index.len()
+    }
+
+    /// Compares two snapshots and returns a diff indicating what changed.
+    pub fn compare_snapshots(env: Env, from_id: u64, to_id: u64) -> SnapshotDiff {
+        let from: CoreConfigSnapshot = env
+            .storage()
+            .instance()
+            .get(&DataKey::ConfigSnapshot(from_id))
+            .unwrap_or_else(|| panic!("Snapshot not found: from_id"));
+        let to: CoreConfigSnapshot = env
+            .storage()
+            .instance()
+            .get(&DataKey::ConfigSnapshot(to_id))
+            .unwrap_or_else(|| panic!("Snapshot not found: to_id"));
+        SnapshotDiff {
+            from_id,
+            to_id,
+            admin_changed: from.admin != to.admin,
+            version_changed: from.version != to.version,
+            previous_version_changed: from.previous_version != to.previous_version,
+            multisig_threshold_changed: from.multisig_threshold != to.multisig_threshold,
+            multisig_signers_changed: from.multisig_signers != to.multisig_signers,
+            from_version: from.version,
+            to_version: to.version,
+        }
+    }
+
+    /// Returns aggregated rollback intelligence for operators.
+    pub fn get_rollback_info(env: Env) -> RollbackInfo {
+        let current_version: u32 = env.storage().instance().get(&DataKey::Version).unwrap_or(0);
+        let previous_version: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PreviousVersion)
+            .unwrap_or(0);
+        let rollback_available = previous_version > 0;
+
+        let migration_state: Option<MigrationState> =
+            env.storage().instance().get(&DataKey::MigrationState);
+        let has_migration = migration_state.is_some();
+        let migration_from_version = migration_state
+            .as_ref()
+            .map(|m| m.from_version)
+            .unwrap_or(0);
+        let migration_to_version = migration_state.as_ref().map(|m| m.to_version).unwrap_or(0);
+        let migration_timestamp = migration_state.as_ref().map(|m| m.migrated_at).unwrap_or(0);
+
+        let index: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SnapshotIndex)
+            .unwrap_or(Vec::new(&env));
+        let snapshot_count = index.len();
+        let has_snapshot = snapshot_count > 0;
+        let (latest_snapshot_id, latest_snapshot_version) = if has_snapshot {
+            let latest_id = index.get(snapshot_count - 1).unwrap();
+            let snap: CoreConfigSnapshot = env
+                .storage()
+                .instance()
+                .get(&DataKey::ConfigSnapshot(latest_id))
+                .unwrap_or_else(|| panic!("Snapshot index inconsistency"));
+            (latest_id, snap.version)
+        } else {
+            (0u64, 0u32)
+        };
+
+        RollbackInfo {
+            current_version,
+            previous_version,
+            rollback_available,
+            has_migration,
+            migration_from_version,
+            migration_to_version,
+            migration_timestamp,
+            snapshot_count,
+            has_snapshot,
+            latest_snapshot_id,
+            latest_snapshot_version,
+        }
     }
 
     /// Retrieves the chain identifier.
@@ -2409,6 +2813,7 @@ mod test {
     pub mod state_snapshot_tests;
     pub mod upgrade_rollback_scenarios;
     pub mod upgrade_rollback_tests;
+    pub mod upgrade_timelock_tests;
 
     // WASM for testing (only available after building for wasm32 target)
     #[cfg(feature = "upgrade_rollback_tests")]
@@ -2422,9 +2827,9 @@ mod test {
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
         let mut signers = soroban_sdk::Vec::new(&env);
-        signers.push_back(Address::random(&env));
-        signers.push_back(Address::random(&env));
-        signers.push_back(Address::random(&env));
+        signers.push_back(Address::generate(&env));
+        signers.push_back(Address::generate(&env));
+        signers.push_back(Address::generate(&env));
 
         client.init(&signers, &2u32);
     }
@@ -2437,7 +2842,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         client.set_version(&2);
@@ -2452,7 +2857,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
         client.set_version(&5);
 
@@ -2473,7 +2878,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         for version in 1..=25u32 {
@@ -2496,7 +2901,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         // Initial version should be 2
@@ -2528,7 +2933,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let migration_hash = BytesN::from_array(&env, &[0u8; 32]);
@@ -2545,7 +2950,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let migration_hash = BytesN::from_array(&env, &[0u8; 32]);
@@ -2567,7 +2972,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         // Initially no previous version
@@ -2592,7 +2997,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
 
         // 1. Initialize contract
         client.init_admin(&admin);
@@ -2628,7 +3033,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         // Migrate from v2 to v3
@@ -2645,7 +3050,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let initial_event_count = env.events().all().len();
@@ -2666,7 +3071,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         assert_eq!(client.get_version(), 2);
@@ -2680,7 +3085,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         let chain_id = String::from_str(&env, "stellar");
         let network_id = String::from_str(&env, "testnet");
 
@@ -2705,7 +3110,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         let chain_id = String::from_str(&env, "ethereum");
         let network_id = String::from_str(&env, "mainnet");
 
@@ -2726,8 +3131,8 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin1 = Address::random(&env);
-        let admin2 = Address::random(&env);
+        let admin1 = Address::generate(&env);
+        let admin2 = Address::generate(&env);
         let chain_id = String::from_str(&env, "stellar");
         let network_id = String::from_str(&env, "testnet");
 
@@ -2746,7 +3151,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
 
         // Legacy init should still work (without network config)
         client.init_admin(&admin);
@@ -2768,8 +3173,8 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin1 = Address::random(&env);
-        let admin2 = Address::random(&env);
+        let admin1 = Address::generate(&env);
+        let admin2 = Address::generate(&env);
 
         client.init_admin(&admin1);
         client.init_admin(&admin2);
@@ -2783,7 +3188,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         client.set_version(&3);
@@ -2805,7 +3210,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         // Verify initial version
@@ -2828,7 +3233,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let initial_version = client.get_version();
@@ -2856,7 +3261,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         env.mock_all_auths_allowing_non_root_auth();
@@ -2879,7 +3284,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         client.set_version(&4);
@@ -2898,7 +3303,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let hash = BytesN::from_array(&env, &[5u8; 32]);
@@ -2922,7 +3327,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let initial_events = env.events().all().len();
@@ -2942,7 +3347,7 @@ mod test {
         let contract_id = env.register_contract(None, GrainlifyContract);
         let client = GrainlifyContractClient::new(&env, &contract_id);
 
-        let admin = Address::random(&env);
+        let admin = Address::generate(&env);
         client.init_admin(&admin);
 
         let v_before = client.get_version();

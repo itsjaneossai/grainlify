@@ -83,7 +83,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "bytes": "89b5ad18d12efcd84139a9e939f0c50fae9ea5c72e8414b72265466d7835a7a9"
+                  "bytes": "662bbb3fdd552087f979795402b2fd6af12bd7f7afc177452c51143828ea9028"
                 },
                 {
                   "bool": true
@@ -149,7 +149,7 @@
                   ]
                 },
                 {
-                  "bytes": "ed1f3a529be52c255b24ee67e514da548c49e7d4894fe1eece3ff0a02e905112abb83d96b3b2fad9627391bc9a496b6f454d002e361ff8d6ef205b531a2b550f"
+                  "bytes": "159ec67eec3b7be39918723ac6666824ff7abfebee0429e5a01993b2f618d5514d94965c82a7846b9419bf033eb25e5cb98dfc47d871c276213e32312fe3bb05"
                 }
               ]
             }
@@ -394,7 +394,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "bytes": "89b5ad18d12efcd84139a9e939f0c50fae9ea5c72e8414b72265466d7835a7a9"
+                  "bytes": "662bbb3fdd552087f979795402b2fd6af12bd7f7afc177452c51143828ea9028"
                 }
               }
             },
@@ -458,11 +458,51 @@
                     },
                     {
                       "key": {
+                        "symbol": "delegate"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
+                        "symbol": "delegate_permissions"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "depositor"
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "jurisdiction"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "symbol": "None"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "labels"
+                      },
+                      "val": {
+                        "vec": []
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "metadata"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {
@@ -483,6 +523,49 @@
                           }
                         ]
                       }
+                    }
+                  ]
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          4095
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "key": {
+              "vec": [
+                {
+                  "symbol": "EscrowIndex"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "EscrowIndex"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "vec": [
+                    {
+                      "u64": "1"
                     }
                   ]
                 }

@@ -155,6 +155,8 @@ pub enum Error {
     /// **Client action:** Use an allowed label or request admin to update
     /// the label configuration.
     LabelNotAllowed = 16,
+    // Ownership transfer errors
+    TransferProposalNotFound = 17,
 }
 
 #[contracttype]
@@ -276,6 +278,9 @@ pub enum DataKey {
     ProgramIndex,
     DeprecationState,
     LabelConfig,
+    // Ownership transfer
+    PendingAdmin,
+    ProgramPendingAdmin(u64),
 }
 
 /// Filter inputs for cursor-based program search.
@@ -1280,8 +1285,189 @@ impl ProgramEscrowContract {
     }
 }
 
+// ── Ownership transfer (two-step propose / accept) ──────────────────────────
+
+#[contractimpl]
+impl ProgramEscrowContract {
+    // ── Contract-level admin transfer ───────────────────────────────────────
+
+    /// Propose transferring contract-level admin to `new_owner`.
+    /// Only the current admin may call this. Overwrites any prior pending proposal.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn propose_transfer_ownership(env: Env, new_owner: Address) -> Result<(), Error> {
+        let admin = Self::require_contract_admin(&env);
+        Self::ensure_initialized(&env)?;
+
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_owner);
+
+        env.events().publish(
+            (symbol_short!("own_prop"), admin),
+            (new_owner, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Accept a pending contract-level admin transfer.
+    /// Only the proposed new owner may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn accept_transfer_ownership(env: Env) -> Result<(), Error> {
+        Self::ensure_initialized(&env)?;
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .ok_or(Error::TransferProposalNotFound)?;
+        pending.require_auth();
+
+        let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        env.storage().instance().set(&DataKey::Admin, &pending);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        env.events().publish(
+            (symbol_short!("own_xfer"), old_admin),
+            (pending, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Cancel a pending contract-level admin transfer.
+    /// Only the current admin may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn cancel_transfer_ownership(env: Env) -> Result<(), Error> {
+        Self::ensure_initialized(&env)?;
+        let admin = Self::require_contract_admin(&env);
+
+        if !env.storage().instance().has(&DataKey::PendingAdmin) {
+            return Err(Error::TransferProposalNotFound);
+        }
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        env.events()
+            .publish((symbol_short!("own_cncl"), admin), env.ledger().timestamp());
+        Ok(())
+    }
+
+    /// Read the pending contract-level admin, if any.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn get_pending_owner(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PendingAdmin)
+    }
+
+    // ── Per-program admin transfer ─────────────────────────────────────────
+
+    /// Propose transferring a program's admin to `new_admin`.
+    /// Only the current program admin may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn propose_program_transfer(
+        env: Env,
+        program_id: u64,
+        new_admin: Address,
+    ) -> Result<(), Error> {
+        Self::ensure_initialized(&env)?;
+        let program: Program = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Program(program_id))
+            .ok_or(Error::ProgramNotFound)?;
+        program.admin.require_auth();
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::ProgramPendingAdmin(program_id), &new_admin);
+
+        env.events().publish(
+            (symbol_short!("prg_prop"), program_id),
+            (program.admin, new_admin, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Accept a pending program admin transfer.
+    /// Only the proposed new admin may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn accept_program_transfer(env: Env, program_id: u64) -> Result<(), Error> {
+        Self::ensure_initialized(&env)?;
+        let pending: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ProgramPendingAdmin(program_id))
+            .ok_or(Error::TransferProposalNotFound)?;
+        pending.require_auth();
+
+        let mut program: Program = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Program(program_id))
+            .ok_or(Error::ProgramNotFound)?;
+        let old_admin = program.admin.clone();
+        program.admin = pending.clone();
+        Self::store_program(&env, program_id, &program);
+        env.storage()
+            .persistent()
+            .remove(&DataKey::ProgramPendingAdmin(program_id));
+
+        env.events().publish(
+            (symbol_short!("prg_xfer"), program_id),
+            (old_admin, pending, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Cancel a pending program admin transfer.
+    /// Only the current program admin may call this.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn cancel_program_transfer(env: Env, program_id: u64) -> Result<(), Error> {
+        Self::ensure_initialized(&env)?;
+        let program: Program = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Program(program_id))
+            .ok_or(Error::ProgramNotFound)?;
+        program.admin.require_auth();
+
+        if !env
+            .storage()
+            .persistent()
+            .has(&DataKey::ProgramPendingAdmin(program_id))
+        {
+            return Err(Error::TransferProposalNotFound);
+        }
+        env.storage()
+            .persistent()
+            .remove(&DataKey::ProgramPendingAdmin(program_id));
+
+        env.events().publish(
+            (symbol_short!("prg_cncl"), program_id),
+            (program.admin, env.ledger().timestamp()),
+        );
+        Ok(())
+    }
+
+    /// Read the pending admin for a specific program, if any.
+    ///
+    /// Time complexity: O(1)  Space complexity: O(1)
+    pub fn get_pending_program_admin(env: Env, program_id: u64) -> Option<Address> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::ProgramPendingAdmin(program_id))
+    }
+}
+
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_ownership_transfer;
+#[cfg(test)]
+mod test_search;
 #[cfg(test)]
 mod test_full_lifecycle;
 #[cfg(test)]

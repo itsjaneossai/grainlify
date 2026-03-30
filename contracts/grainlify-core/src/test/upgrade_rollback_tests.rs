@@ -28,13 +28,17 @@
 //! - Duplicate-approval rejection
 //! - Version unchanged after failed upgrade (storage rollback)
 //! - `set_version` + `get_previous_version` round-trip (rollback support)
+//! - Proposal expiry: cannot execute/approve after deadline
+//! - Proposal cancellation: explicit revocation by any signer
+//! - Boundary: expiry exactly at execute timestamp
+//! - Security: double-cancel prevention, cancel-after-execute prevention
 
 #![cfg(test)]
 
 extern crate std;
 
 use soroban_sdk::{
-    testutils::{Address as _, Events},
+    testutils::{Address as _, Events, Ledger as _},
     Address, BytesN, Env, IntoVal, Vec as SorobanVec,
 };
 
@@ -128,10 +132,10 @@ fn test_execute_upgrade_with_sufficient_approvals() {
     // Initialize with multisig (2 of 3)
     client.init(&signers, &2);
 
-    let wasm_hash = upload_wasm(&env);
+    let wasm_hash = fake_wasm(&env);
 
     // Propose upgrade
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
 
     // Approve with 2 signers (meets threshold)
     client.approve_upgrade(&proposal_id, &signer1);
@@ -169,10 +173,10 @@ fn test_execute_upgrade_insufficient_approvals() {
     // Initialize with multisig (3 of 3)
     client.init(&signers, &3);
 
-    let wasm_hash = upload_wasm(&env);
+    let wasm_hash = fake_wasm(&env);
 
     // Propose upgrade
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
 
     // Approve with only 2 signers (threshold is 3)
     client.approve_upgrade(&proposal_id, &signer1);
@@ -222,8 +226,8 @@ fn test_execute_upgrade_when_state_inconsistent() {
 
     client.init(&signers, &1);
 
-    let wasm_hash = upload_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let wasm_hash = fake_wasm(&env);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
     client.approve_upgrade(&proposal_id, &signer1);
 
     // Simulate inconsistent state by removing version
@@ -253,8 +257,8 @@ fn test_execute_upgrade_when_paused() {
 
     client.init(&signers, &1);
 
-    let wasm_hash = upload_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let wasm_hash = fake_wasm(&env);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
     client.approve_upgrade(&proposal_id, &signer1);
 
     // Pause the contract
@@ -294,8 +298,8 @@ fn test_execute_upgrade_already_executed() {
 
     client.init(&signers, &1);
 
-    let wasm_hash = upload_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let wasm_hash = fake_wasm(&env);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
     client.approve_upgrade(&proposal_id, &signer1);
 
     // Manually mark as executed (simulating previous execution)
@@ -336,8 +340,8 @@ fn test_execute_upgrade_version_tracking() {
     );
 
     // Create upgrade proposal
-    let wasm_hash = upload_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let wasm_hash = fake_wasm(&env);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
     client.approve_upgrade(&proposal_id, &signer1);
 
     // The execute_upgrade function should store previous version before upgrading
@@ -361,8 +365,8 @@ fn test_execute_upgrade_events_emitted() {
 
     client.init(&signers, &1);
 
-    let wasm_hash = upload_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let wasm_hash = fake_wasm(&env);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
     client.approve_upgrade(&proposal_id, &signer1);
 
     // The execute_upgrade function should emit events for:
@@ -394,8 +398,8 @@ fn test_execute_upgrade_security_validations() {
     assert!(invariants.healthy, "Contract should start in healthy state");
 
     // Test 2: Create valid proposal
-    let wasm_hash = upload_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash);
+    let wasm_hash = fake_wasm(&env);
+    let proposal_id = client.propose_upgrade(&signer1, &wasm_hash, &0u64);
     client.approve_upgrade(&proposal_id, &signer1);
 
     // Test 3: Verify can_execute checks all conditions
@@ -516,7 +520,7 @@ fn test_propose_upgrade_rejects_non_signer() {
     // No mock_all_auths — auth checks are enforced.
     let (client, _signers) = setup_multisig(&env);
     let outsider = Address::generate(&env);
-    client.propose_upgrade(&outsider, &fake_wasm(&env));
+    client.propose_upgrade(&outsider, &fake_wasm(&env), &0u64);
 }
 
 /// A non-signer must not be able to approve an upgrade proposal.
@@ -530,7 +534,7 @@ fn test_approve_upgrade_rejects_non_signer() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     let outsider = Address::generate(&env);
     // outsider is not in the signer list — must panic.
     client.approve_upgrade(&proposal_id, &outsider);
@@ -545,7 +549,7 @@ fn test_execute_upgrade_rejects_below_threshold() {
     let (client, signers) = setup_multisig(&env);
 
     // Propose but only one approval (threshold is 2).
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&proposal_id, &signers[0]);
 
     // Execute without reaching threshold must panic.
@@ -564,7 +568,7 @@ fn test_execute_upgrade_reaches_wasm_swap_at_threshold() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&proposal_id, &signers[0]);
     client.approve_upgrade(&proposal_id, &signers[1]);
 
@@ -589,7 +593,7 @@ fn test_execute_upgrade_prevents_double_execution_after_success() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&proposal_id, &signers[0]);
     client.approve_upgrade(&proposal_id, &signers[1]);
 
@@ -603,7 +607,7 @@ fn test_execute_upgrade_prevents_double_execution_after_success() {
     // "not executed". A second call will again reach the WASM swap and panic.
     // This test instead verifies the "already executed" path by calling
     // execute_upgrade on a proposal that was never approved (threshold not met).
-    let proposal_id2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env));
+    let proposal_id2 = client.propose_upgrade(&signers[0], &fake_wasm_v2(&env), &0u64);
     // No approvals — must panic with "Threshold not met".
     client.execute_upgrade(&proposal_id2);
 }
@@ -615,9 +619,9 @@ fn test_proposal_ids_are_monotonically_increasing() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
-    let p2 = client.propose_upgrade(&signers[1], &fake_wasm(&env));
-    let p3 = client.propose_upgrade(&signers[2], &fake_wasm(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let p2 = client.propose_upgrade(&signers[1], &fake_wasm(&env), &0u64);
+    let p3 = client.propose_upgrade(&signers[2], &fake_wasm(&env), &0u64);
 
     assert!(p2 > p1, "proposal IDs must increase");
     assert!(p3 > p2, "proposal IDs must increase");
@@ -631,7 +635,7 @@ fn test_approve_upgrade_rejects_duplicate_approval() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&proposal_id, &signers[0]);
     client.approve_upgrade(&proposal_id, &signers[0]); // duplicate — must panic
 }
@@ -643,8 +647,8 @@ fn test_multiple_proposals_are_independent() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env));
-    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env));
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env), &0u64);
 
     // Approve p1 with two signers.
     client.approve_upgrade(&p1, &signers[0]);
@@ -675,7 +679,7 @@ fn test_propose_upgrade_stores_metadata_per_proposal() {
     let (client, signers) = setup_multisig(&env);
 
     let wasm_hash = fake_wasm(&env);
-    let proposal_id = client.propose_upgrade(&signers[0], &wasm_hash);
+    let proposal_id = client.propose_upgrade(&signers[0], &wasm_hash, &0u64);
     let proposal = client
         .get_upgrade_proposal(&proposal_id)
         .expect("proposal metadata must exist");
@@ -793,7 +797,7 @@ fn test_execute_upgrade_at_exact_threshold_reaches_wasm_swap() {
     // 2-of-3 multisig; exactly 2 approvals = threshold met.
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     client.approve_upgrade(&proposal_id, &signers[0]);
     client.approve_upgrade(&proposal_id, &signers[1]);
     // Exactly 2 approvals — quorum met, panics at WASM swap.
@@ -808,7 +812,7 @@ fn test_execute_upgrade_below_threshold_by_one() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     // Only 1 approval for a 2-of-3 multisig.
     client.approve_upgrade(&proposal_id, &signers[0]);
     client.execute_upgrade(&proposal_id);
@@ -824,7 +828,7 @@ fn test_propose_upgrade_emits_event() {
     let (client, signers) = setup_multisig(&env);
 
     let events_before = env.events().all().len();
-    client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
 
     assert!(
         env.events().all().len() > events_before,
@@ -839,12 +843,345 @@ fn test_approve_upgrade_emits_event() {
     env.mock_all_auths();
     let (client, signers) = setup_multisig(&env);
 
-    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env));
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
     let events_before = env.events().all().len();
     client.approve_upgrade(&proposal_id, &signers[1]);
 
     assert!(
         env.events().all().len() > events_before,
         "approve_upgrade must emit at least one event"
+    );
+}
+
+// ── proposal expiry ───────────────────────────────────────────────────────────
+
+/// A proposal with `expiry == 0` never expires regardless of ledger time.
+#[test]
+fn test_propose_upgrade_no_expiry_never_expires() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+
+    // Advance ledger time far into the future.
+    env.ledger().with_mut(|l| l.timestamp = 9_999_999_999);
+
+    // Proposal with expiry=0 must still be approvable.
+    client.approve_upgrade(&proposal_id, &signers[1]);
+
+    // And `can_execute` must reflect the approval.
+    assert!(
+        client.can_execute(&proposal_id),
+        "proposal with no expiry must remain executable after time advances"
+    );
+}
+
+/// `propose_upgrade` stores the expiry in the proposal record.
+#[test]
+fn test_propose_upgrade_stores_expiry_in_record() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let expiry: u64 = 1_000_000;
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &expiry);
+
+    let record = client
+        .get_upgrade_proposal(&proposal_id)
+        .expect("proposal record must exist");
+
+    assert_eq!(
+        record.expiry, expiry,
+        "expiry must round-trip through storage"
+    );
+    assert!(!record.cancelled, "new proposal must not be cancelled");
+}
+
+/// An expired proposal must not be executable — panics with "Proposal expired".
+#[test]
+#[should_panic(expected = "Proposal expired")]
+fn test_execute_upgrade_panics_when_proposal_expired() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    // Ledger starts at timestamp 0; set expiry to 100.
+    let expiry: u64 = 100;
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &expiry);
+    client.approve_upgrade(&proposal_id, &signers[0]);
+    client.approve_upgrade(&proposal_id, &signers[1]);
+
+    // Advance ledger past expiry.
+    env.ledger().with_mut(|l| l.timestamp = 100);
+
+    // Must panic: "Proposal expired".
+    client.execute_upgrade(&proposal_id);
+}
+
+/// An expired proposal must not be approvable.
+#[test]
+#[should_panic]
+fn test_approve_upgrade_panics_when_proposal_expired() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let expiry: u64 = 50;
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &expiry);
+
+    // Advance ledger past expiry.
+    env.ledger().with_mut(|l| l.timestamp = 50);
+
+    // Must panic: ProposalExpired.
+    client.approve_upgrade(&proposal_id, &signers[1]);
+}
+
+/// `can_execute` returns false for an expired proposal.
+#[test]
+fn test_can_execute_returns_false_for_expired_proposal() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let expiry: u64 = 200;
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &expiry);
+    client.approve_upgrade(&proposal_id, &signers[0]);
+    client.approve_upgrade(&proposal_id, &signers[1]);
+
+    // Before expiry: executable.
+    assert!(
+        client.can_execute(&proposal_id),
+        "proposal must be executable before expiry"
+    );
+
+    // Advance exactly to expiry timestamp — now expired.
+    env.ledger().with_mut(|l| l.timestamp = expiry);
+    assert!(
+        !client.can_execute(&proposal_id),
+        "proposal must not be executable at or after expiry"
+    );
+}
+
+/// Expiry boundary: `timestamp == expiry` is expired (inclusive).
+/// `timestamp == expiry - 1` is still valid.
+#[test]
+fn test_expiry_boundary_one_second_before_is_valid() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let expiry: u64 = 300;
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &expiry);
+    client.approve_upgrade(&proposal_id, &signers[0]);
+    client.approve_upgrade(&proposal_id, &signers[1]);
+
+    // One second before expiry: valid.
+    env.ledger().with_mut(|l| l.timestamp = expiry - 1);
+    assert!(
+        client.can_execute(&proposal_id),
+        "proposal must be executable one second before expiry"
+    );
+
+    // Exactly at expiry: expired.
+    env.ledger().with_mut(|l| l.timestamp = expiry);
+    assert!(
+        !client.can_execute(&proposal_id),
+        "proposal must be expired exactly at expiry timestamp"
+    );
+}
+
+/// Approvals collected before expiry are irrelevant after expiry — execution
+/// must still be blocked even if the threshold was previously met.
+#[test]
+#[should_panic(expected = "Proposal expired")]
+fn test_approvals_before_expiry_cannot_execute_after_expiry() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    // Collect approvals while still within the governance window.
+    let expiry: u64 = 500;
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &expiry);
+    client.approve_upgrade(&proposal_id, &signers[0]);
+    client.approve_upgrade(&proposal_id, &signers[1]);
+
+    // Window closes.
+    env.ledger().with_mut(|l| l.timestamp = expiry);
+
+    // Must panic: "Proposal expired" — stale hash must not be executable.
+    client.execute_upgrade(&proposal_id);
+}
+
+// ── proposal cancellation ─────────────────────────────────────────────────────
+
+/// Any signer can cancel a pending proposal.
+#[test]
+fn test_cancel_upgrade_succeeds_for_signer() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    client.cancel_upgrade(&proposal_id, &signers[1]);
+
+    let record = client
+        .get_upgrade_proposal(&proposal_id)
+        .expect("record must exist after cancellation");
+
+    assert!(record.cancelled, "proposal must be marked cancelled");
+    assert!(
+        !client.can_execute(&proposal_id),
+        "cancelled proposal must not be executable"
+    );
+}
+
+/// `cancel_upgrade` emits a cancellation event.
+#[test]
+fn test_cancel_upgrade_emits_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let events_before = env.events().all().len();
+    client.cancel_upgrade(&proposal_id, &signers[0]);
+
+    assert!(
+        env.events().all().len() > events_before,
+        "cancel_upgrade must emit at least one event"
+    );
+}
+
+/// A cancelled proposal must not be executed — panics with "Proposal cancelled".
+#[test]
+#[should_panic(expected = "Proposal cancelled")]
+fn test_execute_upgrade_panics_when_proposal_cancelled() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    client.approve_upgrade(&proposal_id, &signers[0]);
+    client.approve_upgrade(&proposal_id, &signers[1]);
+
+    // Cancel after reaching quorum.
+    client.cancel_upgrade(&proposal_id, &signers[2]);
+
+    // Must panic: "Proposal cancelled".
+    client.execute_upgrade(&proposal_id);
+}
+
+/// A cancelled proposal must not accept new approvals.
+#[test]
+#[should_panic]
+fn test_approve_upgrade_panics_when_proposal_cancelled() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    client.cancel_upgrade(&proposal_id, &signers[0]);
+
+    // Must panic: ProposalCancelled.
+    client.approve_upgrade(&proposal_id, &signers[1]);
+}
+
+/// A non-signer must not be able to cancel a proposal.
+#[test]
+#[should_panic]
+fn test_cancel_upgrade_rejects_non_signer() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let outsider = Address::generate(&env);
+    // outsider is not a signer — must panic.
+    client.cancel_upgrade(&proposal_id, &outsider);
+}
+
+/// Cancelling a non-existent proposal must panic.
+#[test]
+#[should_panic(expected = "Upgrade proposal not found")]
+fn test_cancel_upgrade_panics_for_nonexistent_proposal() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    // proposal 999 was never created.
+    client.cancel_upgrade(&999, &signers[0]);
+}
+
+/// Double-cancel must be prevented — re-cancelling the same proposal panics.
+#[test]
+#[should_panic]
+fn test_cancel_upgrade_prevents_double_cancel() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    client.cancel_upgrade(&proposal_id, &signers[0]);
+    // Second cancel must panic.
+    client.cancel_upgrade(&proposal_id, &signers[1]);
+}
+
+/// Cancelling an already-executed proposal must be rejected.
+///
+/// The WASM swap panics with a host error when using a fake hash, rolling back
+/// `mark_executed`. So this test creates a scenario where we verify the guard
+/// through the pre-execution check: after quorum is met, cancel must be allowed
+/// (since executed=false until the WASM swap succeeds), and then an attempt to
+/// re-execute must see "cancelled".
+#[test]
+#[should_panic(expected = "Proposal cancelled")]
+fn test_cancel_after_quorum_met_blocks_execution() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    // Reach quorum.
+    let proposal_id = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    client.approve_upgrade(&proposal_id, &signers[0]);
+    client.approve_upgrade(&proposal_id, &signers[1]);
+    assert!(
+        client.can_execute(&proposal_id),
+        "quorum must be reached before cancel"
+    );
+
+    // A signer revokes the proposal after quorum.
+    client.cancel_upgrade(&proposal_id, &signers[2]);
+
+    // Execution must now be blocked by cancellation, not by threshold.
+    client.execute_upgrade(&proposal_id);
+}
+
+/// Cancelling one proposal does not affect sibling proposals.
+#[test]
+fn test_cancel_upgrade_does_not_affect_other_proposals() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, signers) = setup_multisig(&env);
+
+    let p1 = client.propose_upgrade(&signers[0], &fake_wasm(&env), &0u64);
+    let p2 = client.propose_upgrade(&signers[1], &fake_wasm_v2(&env), &0u64);
+
+    client.cancel_upgrade(&p1, &signers[2]);
+
+    // p1 is cancelled.
+    let r1 = client.get_upgrade_proposal(&p1).expect("p1 must exist");
+    assert!(r1.cancelled, "p1 must be cancelled");
+
+    // p2 is independent and still live.
+    let r2 = client.get_upgrade_proposal(&p2).expect("p2 must exist");
+    assert!(!r2.cancelled, "p2 must not be affected by p1 cancellation");
+
+    // p2 can still receive approvals.
+    client.approve_upgrade(&p2, &signers[0]);
+    client.approve_upgrade(&p2, &signers[1]);
+    assert!(
+        client.can_execute(&p2),
+        "p2 must still be executable after p1 is cancelled"
     );
 }

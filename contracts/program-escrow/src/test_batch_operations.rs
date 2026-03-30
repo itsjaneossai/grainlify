@@ -53,6 +53,7 @@ pub fn init_program(ctx: &Ctx, program_id: &str, amount: i128) {
         &Some(amount),
         &None,
     );
+    ctx.client.publish_program();
 }
 
 #[test]

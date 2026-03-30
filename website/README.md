@@ -33,6 +33,31 @@ The build is static (HTML, CSS, JS). You can host it on any static host:
 
 Replace `static/img/logo.svg` with your own logo and update `url` in config for your production domain.
 
+## Design System
+
+Grainlify documentation uses the same design tokens as the main application for visual consistency.
+
+### Design Tokens
+
+Visual properties are defined in `src/css/custom.css` and align with the frontend design system:
+
+#### Color Ramps
+- **Primary**: Gold scale for branding and interactive elements
+- **Neutral**: Warm gray scale for backgrounds and text
+- **Semantic**: Success, warning, and error states
+
+#### Typography
+- Consistent with frontend: Inter font family, responsive sizing
+- WCAG 2.1 AA compliant contrast ratios
+
+#### Spacing & Layout
+- 4px base grid system
+- Consistent border radius and shadow scales
+
+### Customization
+
+Theme colors are defined as CSS custom properties and can be overridden for branding needs. The system supports both light and dark modes automatically.
+
 ## Search
 
 Search is disabled to avoid runtime errors with local search plugins in development. Use the sidebar and browser find (Ctrl+F / ⌘F) to navigate. To add search later, consider a plugin that supports docs-only mode and test with `npm run build` then `npm run serve`.

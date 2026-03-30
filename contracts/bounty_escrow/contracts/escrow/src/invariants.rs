@@ -1,4 +1,5 @@
 use crate::{Escrow, EscrowStatus};
+use grainlify_core::strict_mode;
 use soroban_sdk::{symbol_short, Env, Symbol};
 
 const INV_CALLS: Symbol = symbol_short!("InvCalls");
@@ -46,6 +47,31 @@ pub(crate) fn assert_escrow(env: &Env, escrow: &Escrow) {
     if escrow.status == EscrowStatus::Released && escrow.remaining_amount != 0 {
         panic!("Invariant violated: released escrow must have zero remaining amount");
     }
+
+    // Strict mode: emit diagnostic event on every successful invariant check
+    strict_mode::strict_emit(env, symbol_short!("inv_ok"), symbol_short!("escrow"));
+}
+
+/// Strict-mode-only deep validation of escrow state.
+///
+/// Runs additional checks that are too expensive for production but valuable
+/// for catching subtle bugs on dev/staging networks. Compiled out when
+/// `strict-mode` is not enabled.
+#[cfg(feature = "strict-mode")]
+pub(crate) fn strict_assert_escrow(env: &Env, escrow: &Escrow) {
+    strict_mode::strict_assert_balance_sane(
+        escrow.amount,
+        escrow.remaining_amount,
+        "escrow_balance",
+    );
+    if escrow.status == EscrowStatus::Released {
+        strict_mode::strict_assert_eq(
+            escrow.remaining_amount,
+            0,
+            "released escrow remaining_amount must be zero",
+        );
+    }
+    strict_mode::strict_emit(env, symbol_short!("strict"), symbol_short!("esc_chk"));
 }
 
 /// Verify per-escrow invariants (INV-ESC-1 through INV-ESC-4) without panicking.

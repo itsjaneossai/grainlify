@@ -51,6 +51,7 @@ fn setup_initialized(
 
     let program_id = String::from_str(env, "test-program");
     client.init_program(&program_id, &admin, &token_id, &admin, &None, &None);
+    client.publish_program();
     client.initialize_contract(&admin);
 
     (client, admin, token_admin_client)

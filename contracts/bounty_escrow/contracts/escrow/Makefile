@@ -28,6 +28,11 @@ build:
 	stellar contract build
 	@ls -l target/wasm32v1-none/release/*.wasm
 
+build-strict:
+	stellar contract build -- --features strict-mode
+	@ls -l target/wasm32v1-none/release/*.wasm
+	@echo "Built with strict-mode enabled (dev/staging only)"
+
 fmt:
 	cargo fmt --all
 

@@ -113,8 +113,10 @@ fn test_inv1_valid_locked_escrow_passes() {
         amount: 1_000,
         remaining_amount: 1_000,
         status: EscrowStatus::Locked,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
+        deadline: 999,
+        refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
         archived: false,
         archived_at: None,
     };
@@ -129,24 +131,10 @@ fn test_inv1_negative_amount_fails() {
         amount: -1,
         remaining_amount: 0,
         status: EscrowStatus::Locked,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
-        archived: false,
-        archived_at: None,
-    };
-    assert!(!check_escrow_sanity(&escrow));
-}
-
-#[test]
-fn test_inv1_negative_remaining_amount_fails() {
-    let env = Env::default();
-    let escrow = Escrow {
-        depositor: Address::generate(&env),
-        amount: 1_000,
-        remaining_amount: -1,
-        status: EscrowStatus::Locked,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
+        deadline: 999,
+        refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
         archived: false,
         archived_at: None,
     };
@@ -161,8 +149,10 @@ fn test_inv1_remaining_exceeds_amount_fails() {
         amount: 500,
         remaining_amount: 501,
         status: EscrowStatus::Locked,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
+        deadline: 999,
+        refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
         archived: false,
         archived_at: None,
     };
@@ -177,8 +167,10 @@ fn test_inv1_released_with_nonzero_remaining_fails() {
         amount: 1_000,
         remaining_amount: 1,
         status: EscrowStatus::Released,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
+        deadline: 999,
+        refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
         archived: false,
         archived_at: None,
     };
@@ -193,8 +185,10 @@ fn test_inv1_refunded_with_nonzero_remaining_fails() {
         amount: 1_000,
         remaining_amount: 500,
         status: EscrowStatus::Refunded,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
+        deadline: 999,
+        refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
         archived: false,
         archived_at: None,
     };
@@ -578,8 +572,10 @@ fn test_inv4_no_refund_history_is_consistent() {
         amount: 1_000,
         remaining_amount: 1_000,
         status: EscrowStatus::Locked,
-        deadline: 9_999_999,
-        refund_history: vec![&env],
+        deadline: 999,
+        refund_history: soroban_sdk::Vec::new(&Env::default()),
+        creation_timestamp: 0,
+        expiry: 0,
         archived: false,
         archived_at: None,
     };

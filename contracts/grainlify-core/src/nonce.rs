@@ -8,6 +8,7 @@ pub enum NonceError {
 }
 
 #[contracttype]
+#[derive(Clone)]
 pub enum NonceKey {
     Signer(Address),
     SignerWithDomain(Address, Symbol),

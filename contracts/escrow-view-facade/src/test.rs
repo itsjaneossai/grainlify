@@ -47,6 +47,7 @@ mod dummy_escrow {
         pub remaining_amount: i128,
         pub status: EscrowStatus,
         pub deadline: u64,
+        pub schema_version: u32,
     }
 
     #[contracttype]
@@ -69,6 +70,7 @@ mod dummy_escrow {
                     remaining_amount: 1000,
                     status: EscrowStatus::Locked,
                     deadline: 123456789,
+                    schema_version: 1,
                 })
             } else if bounty_id == 2 {
                 Ok(Escrow {
@@ -77,6 +79,7 @@ mod dummy_escrow {
                     remaining_amount: 0,
                     status: EscrowStatus::Released,
                     deadline: 987654321,
+                    schema_version: 1,
                 })
             } else {
                 Err(soroban_sdk::Error::from_contract_error(4)) // BountyNotFound imitation
@@ -119,6 +122,7 @@ mod dummy_escrow {
                     remaining_amount: 1000,
                     status: EscrowStatus::Locked,
                     deadline: 123456789,
+                    schema_version: 1,
                 }
              });
             result

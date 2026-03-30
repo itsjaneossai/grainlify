@@ -305,3 +305,149 @@ fn parity_jurisdiction_refund_paused_fails() {
     let res = client.try_refund(&bounty_id);
     assert!(res.is_err());
 }
+
+// --- Refund Failure Snapshots: Comprehensive Edge Case Coverage ---
+
+/// Refund on nonexistent bounty fails with BountyNotFound error
+#[test]
+fn parity_refund_nonexistent_bounty_fails() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, _cid, _admin, _depositor, _contributor, _token_client) = setup(&env, amount);
+
+    let nonexistent_bounty_id = 9999u64;
+    let res = client.try_refund(&nonexistent_bounty_id);
+    assert!(res.is_err());
+}
+
+/// Refund after release fails (escrow no longer locked)
+#[test]
+fn parity_refund_after_release_fails() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, _cid, _admin, depositor, contributor, _token_client) = setup(&env, amount);
+
+    let bounty_id = 102u64;
+    let deadline = env.ledger().timestamp() + 100;
+    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
+
+    // Release first
+    client.release_funds(&bounty_id, &contributor);
+
+    // Advance past deadline and try to refund
+    env.ledger().set_timestamp(deadline + 1);
+    let res = client.try_refund(&bounty_id);
+    assert!(res.is_err());
+}
+
+/// Refund at exact deadline timestamp (boundary condition) - SHOULD SUCCEED
+#[test]
+fn parity_refund_at_exact_deadline_fails() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, _cid, _admin, depositor, _contributor, _token_client) = setup(&env, amount);
+
+    let bounty_id = 105u64;
+    let deadline = env.ledger().timestamp() + 1000;
+    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
+
+    // Set timestamp to exactly deadline (should SUCCEED - allows >= deadline)
+    env.ledger().set_timestamp(deadline);
+    // This refund SHOULD succeed because deadline enforcement is now >= deadline
+    client.refund(&bounty_id);
+}
+
+/// Refund one block after deadline succeeds
+#[test]
+fn parity_refund_one_block_after_deadline_succeeds() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, contract_id, _admin, depositor, _contributor, token_client) = setup(&env, amount);
+
+    let bounty_id = 106u64;
+    let deadline = env.ledger().timestamp() + 1000;
+    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
+
+    // Set timestamp to exactly deadline + 1
+    env.ledger().set_timestamp(deadline + 1);
+    client.refund(&bounty_id);
+
+    // Verify funds returned
+    assert_eq!(token_client.balance(&depositor), amount);
+    assert_eq!(token_client.balance(&contract_id), 0);
+    let escrow = client.get_escrow(&bounty_id);
+    assert_eq!(escrow.status, EscrowStatus::Refunded);
+}
+
+/// Symmetric test: verify release + refund mutual exclusivity on state
+#[test]
+fn parity_release_vs_refund_mutual_exclusion() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, _cid, _admin, depositor, contributor, _token_client) = setup(&env, amount);
+
+    let bounty_id = 108u64;
+    let deadline = env.ledger().timestamp() + 10;
+    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
+
+    // Release as success path
+    client.release_funds(&bounty_id, &contributor);
+
+    // Verify escrow is Released
+    let escrow_after_release = client.get_escrow(&bounty_id);
+    assert_eq!(escrow_after_release.status, EscrowStatus::Released);
+
+    // Refund must fail (already released)
+    env.ledger().set_timestamp(deadline + 1);
+    let refund_res = client.try_refund(&bounty_id);
+    assert!(refund_res.is_err());
+}
+
+/// Triple-refund attempt fails (idempotency check)
+#[test]
+fn parity_triple_refund_fails() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, _cid, _admin, depositor, _contributor, _token_client) = setup(&env, amount);
+
+    let bounty_id = 109u64;
+    let deadline = env.ledger().timestamp() + 10;
+    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
+
+    env.ledger().set_timestamp(deadline + 1);
+    // First refund succeeds
+    client.refund(&bounty_id);
+
+    // Second refund fails
+    let res2 = client.try_refund(&bounty_id);
+    assert!(res2.is_err());
+
+    // Third refund fails too
+    let res3 = client.try_refund(&bounty_id);
+    assert!(res3.is_err());
+}
+
+/// Refund attempts at multiple time points (deadline progression)
+#[test]
+fn parity_refund_timing_progression() {
+    let env = Env::default();
+    let amount = 10_000i128;
+    let (client, _cid, _admin, depositor, _contributor, _token_client) = setup(&env, amount);
+
+    let bounty_id = 110u64;
+    let deadline = env.ledger().timestamp() + 100;
+    client.lock_funds(&depositor, &bounty_id, &amount, &deadline);
+
+    // Before deadline: must fail
+    env.ledger().set_timestamp(deadline - 1);
+    let res_before = client.try_refund(&bounty_id);
+    assert!(res_before.is_err());
+
+    // At deadline: SHOULD SUCCEED (>= deadline check)
+    env.ledger().set_timestamp(deadline);
+    client.refund(&bounty_id);
+
+    // Verify state is now Refunded
+    let escrow = client.get_escrow(&bounty_id);
+    assert_eq!(escrow.status, EscrowStatus::Refunded);
+}

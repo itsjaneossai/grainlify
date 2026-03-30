@@ -5,6 +5,58 @@
 //! This contract enables organizers to lock funds and distribute prizes to multiple
 //! winners through secure, auditable batch payouts.
 //!
+//! ## Storage Key Namespace
+//!
+//! This contract uses the `PE_` (Program Escrow) namespace prefix for all storage keys
+//! and event symbols to prevent collisions with other contracts:
+//!
+//! ### Storage Keys (PE_ prefix)
+//! - `PE_ProgData` - Program data storage
+//! - `PE_FeeCfg` - Fee configuration
+//! - `PE_PauseFlags` - Pause state flags
+//! - `PE_MaintMode` - Maintenance mode flag
+//! - `PE_AuthIdx` - Authorization key index
+//! - `PE_Scheds` - Release schedules storage
+//! - `PE_RelHist` - Release history storage
+//! - `PE_ProgIdx` - Program index
+//! - `PE_NxtSched` - Next schedule ID
+//! - `PE_RcptID` - Receipt ID counter
+//! - `PE_FeeCol` - Fee collected tracking
+//!
+//! ### Event Symbols (PE_ prefix)
+//! - `PE_PrgInit` - Program initialized
+//! - `PE_FndsLock` - Funds locked
+//! - `PE_BatLck` - Batch funds locked
+//! - `PE_BatRel` - Batch funds released
+//! - `PE_BatchPay` - Batch payout executed
+//! - `PE_Payout` - Single payout executed
+//! - `PE_PauseSt` - Pause state changed
+//! - `PE_MaintSt` - Maintenance mode changed
+//! - `PE_ROModeChg` - Read-only mode changed
+//! - `PE_pr_risk` - Risk flags updated
+//! - `PE_PrgReg` - Program registered
+//! - `PE_PrgRgd` - Program registered (alternate)
+//! - `PE_RelSched` - Release scheduled
+//! - `PE_SchRel` - Schedule released
+//! - `PE_PrgDlgS` - Program delegate set
+//! - `PE_PrgDlgR` - Program delegate revoked
+//! - `PE_PrgMeta` - Program metadata updated
+//! - `PE_DspOpen` - Dispute opened
+//! - `PE_DspRslv` - Dispute resolved
+//!
+//! ### DataKey Enum Variants
+//! All `DataKey` enum variants are protected by namespace isolation:
+//! - Contract-level keys: `Admin`, `PauseFlags`, `MaintenanceMode`, etc.
+//! - Program-scoped keys: `Program(String)`, `ReleaseSchedule(String, u64)`, etc.
+//! - Index keys: `ProgramIndex`, `AuthKeyIndex`, etc.
+//!
+//! ## Security Guarantees
+//!
+//! 1. **Namespace Isolation**: All storage keys use `PE_` prefix
+//! 2. **Collision Prevention**: No key can collide with bounty-escrow (`BE_`) keys
+//! 3. **Migration Safety**: Keys are versioned and namespaced for safe upgrades
+//! 4. **Runtime Validation**: Tests enforce namespace compliance
+//!
 //! ## Overview
 //!
 //! The Program Escrow contract manages the complete lifecycle of hackathon/program prizes:
@@ -144,49 +196,51 @@ use soroban_sdk::{
     String, Symbol, Vec,
 };
 
+use grainlify_core::strict_mode;
+
 mod metadata;
 pub use metadata::*;
 
-// Event types
-const PROGRAM_INITIALIZED: Symbol = symbol_short!("PrgInit");
-const FUNDS_LOCKED: Symbol = symbol_short!("FndsLock");
-const BATCH_FUNDS_LOCKED: Symbol = symbol_short!("BatLck");
-const BATCH_FUNDS_RELEASED: Symbol = symbol_short!("BatRel");
-const BATCH_PAYOUT: Symbol = symbol_short!("BatchPay");
-const PAYOUT: Symbol = symbol_short!("Payout");
-const EVENT_VERSION_V2: u32 = 2;
-const PAUSE_STATE_CHANGED: Symbol = symbol_short!("PauseSt");
-const MAINTENANCE_MODE_CHANGED: Symbol = symbol_short!("MaintSt");
-const READ_ONLY_MODE_CHANGED: Symbol = symbol_short!("ROModeChg");
-const PROGRAM_RISK_FLAGS_UPDATED: Symbol = symbol_short!("pr_risk");
-const PROGRAM_REGISTRY: Symbol = symbol_short!("ProgReg");
-const PROGRAM_REGISTERED: Symbol = symbol_short!("ProgRgd");
-const RELEASE_SCHEDULED: Symbol = symbol_short!("RelSched");
-const SCHEDULE_RELEASED: Symbol = symbol_short!("SchRel");
-const PROGRAM_DELEGATE_SET: Symbol = symbol_short!("PrgDlgS");
-const PROGRAM_DELEGATE_REVOKED: Symbol = symbol_short!("PrgDlgR");
-const PROGRAM_METADATA_UPDATED: Symbol = symbol_short!("PrgMeta");
+// Event types - using namespace-protected symbols
+const PROGRAM_INITIALIZED: Symbol = program_escrow::PROGRAM_INITIALIZED;
+const FUNDS_LOCKED: Symbol = program_escrow::FUNDS_LOCKED;
+const BATCH_FUNDS_LOCKED: Symbol = program_escrow::BATCH_FUNDS_LOCKED;
+const BATCH_FUNDS_RELEASED: Symbol = program_escrow::BATCH_FUNDS_RELEASED;
+const BATCH_PAYOUT: Symbol = program_escrow::BATCH_PAYOUT;
+const PAYOUT: Symbol = program_escrow::PAYOUT;
+const EVENT_VERSION_V2: u32 = shared::EVENT_VERSION_V2;
+const PAUSE_STATE_CHANGED: Symbol = program_escrow::PAUSE_STATE_CHANGED;
+const MAINTENANCE_MODE_CHANGED: Symbol = program_escrow::MAINTENANCE_MODE_CHANGED;
+const READ_ONLY_MODE_CHANGED: Symbol = program_escrow::READ_ONLY_MODE_CHANGED;
+const PROGRAM_RISK_FLAGS_UPDATED: Symbol = program_escrow::PROGRAM_RISK_FLAGS_UPDATED;
+const PROGRAM_REGISTRY: Symbol = program_escrow::PROGRAM_REGISTRY;
+const PROGRAM_REGISTERED: Symbol = program_escrow::PROGRAM_REGISTERED;
+const RELEASE_SCHEDULED: Symbol = program_escrow::RELEASE_SCHEDULED;
+const SCHEDULE_RELEASED: Symbol = program_escrow::SCHEDULE_RELEASED;
+const PROGRAM_DELEGATE_SET: Symbol = program_escrow::PROGRAM_DELEGATE_SET;
+const PROGRAM_DELEGATE_REVOKED: Symbol = program_escrow::PROGRAM_DELEGATE_REVOKED;
+const PROGRAM_METADATA_UPDATED: Symbol = program_escrow::PROGRAM_METADATA_UPDATED;
 
-// Storage keys
-const PROGRAM_DATA: Symbol = symbol_short!("ProgData");
-const RECEIPT_ID: Symbol = symbol_short!("RcptID");
-const SCHEDULES: Symbol = symbol_short!("Scheds");
-const RELEASE_HISTORY: Symbol = symbol_short!("RelHist");
-const NEXT_SCHEDULE_ID: Symbol = symbol_short!("NxtSched");
-const PROGRAM_INDEX: Symbol = symbol_short!("ProgIdx");
-const AUTH_KEY_INDEX: Symbol = symbol_short!("AuthIdx");
-const FEE_CONFIG: Symbol = symbol_short!("FeeCfg");
-const FEE_COLLECTED: Symbol = symbol_short!("FeeCol");
+// Storage keys - using namespace-protected symbols
+const PROGRAM_DATA: Symbol = program_escrow::PROGRAM_DATA;
+const RECEIPT_ID: Symbol = program_escrow::RECEIPT_ID;
+const SCHEDULES: Symbol = program_escrow::SCHEDULES;
+const RELEASE_HISTORY: Symbol = program_escrow::RELEASE_HISTORY;
+const NEXT_SCHEDULE_ID: Symbol = program_escrow::NEXT_SCHEDULE_ID;
+const PROGRAM_INDEX: Symbol = program_escrow::PROGRAM_INDEX;
+const AUTH_KEY_INDEX: Symbol = program_escrow::AUTH_KEY_INDEX;
+const FEE_CONFIG: Symbol = program_escrow::FEE_CONFIG;
+const FEE_COLLECTED: Symbol = program_escrow::FEE_COLLECTED;
 
 // Fee rate is stored in basis points (1 basis point = 0.01%)
 // Example: 100 basis points = 1%, 1000 basis points = 10%
-const BASIS_POINTS: i128 = 10_000;
+const BASIS_POINTS: i128 = shared::BASIS_POINTS;
 const MAX_FEE_RATE: i128 = 1_000; // Maximum 10% fee
 
-pub const RISK_FLAG_HIGH_RISK: u32 = 1 << 0;
-pub const RISK_FLAG_UNDER_REVIEW: u32 = 1 << 1;
-pub const RISK_FLAG_RESTRICTED: u32 = 1 << 2;
-pub const RISK_FLAG_DEPRECATED: u32 = 1 << 3;
+pub const RISK_FLAG_HIGH_RISK: u32 = shared::RISK_FLAG_HIGH_RISK;
+pub const RISK_FLAG_UNDER_REVIEW: u32 = shared::RISK_FLAG_UNDER_REVIEW;
+pub const RISK_FLAG_RESTRICTED: u32 = shared::RISK_FLAG_RESTRICTED;
+pub const RISK_FLAG_DEPRECATED: u32 = shared::RISK_FLAG_DEPRECATED;
 pub const STORAGE_SCHEMA_VERSION: u32 = 1;
 pub const DELEGATE_PERMISSION_RELEASE: u32 = 1 << 0;
 pub const DELEGATE_PERMISSION_REFUND: u32 = 1 << 1;
@@ -295,6 +349,138 @@ mod monitoring {
             let err_key = Symbol::new(env, ERROR_COUNT);
             let err_count: u64 = env.storage().persistent().get(&err_key).unwrap_or(0);
             env.storage().persistent().set(&err_key, &(err_count + 1));
+        }
+    }
+}
+
+// ==================== TWA METRICS MODULE ====================
+pub mod twa_metrics {
+    use crate::{DataKey, TimeWeightedMetrics, TwaBucket};
+    use soroban_sdk::Env;
+
+    const TWA_PERIOD_SECS: u64 = 3600;
+    const NUM_BUCKETS: u64 = 24;
+
+    fn get_bucket_index(timestamp: u64) -> u64 {
+        (timestamp / TWA_PERIOD_SECS) % NUM_BUCKETS
+    }
+
+    fn get_period_id(timestamp: u64) -> u64 {
+        timestamp / TWA_PERIOD_SECS
+    }
+
+    pub fn track_lock(env: &Env, amount: i128) {
+        let timestamp = env.ledger().timestamp();
+        env.storage()
+            .persistent()
+            .set(&DataKey::TwaLastLock, &timestamp);
+
+        let period_id = get_period_id(timestamp);
+        let index = get_bucket_index(timestamp);
+        let key = DataKey::TwaBucket(index);
+
+        let mut bucket: TwaBucket = env.storage().persistent().get(&key).unwrap_or(TwaBucket {
+            period_id,
+            sum_lock_amount: 0,
+            lock_count: 0,
+            sum_settlement_time: 0,
+            settlement_count: 0,
+        });
+
+        if bucket.period_id != period_id {
+            bucket.period_id = period_id;
+            bucket.sum_lock_amount = 0;
+            bucket.lock_count = 0;
+            bucket.sum_settlement_time = 0;
+            bucket.settlement_count = 0;
+        }
+
+        bucket.sum_lock_amount += amount;
+        bucket.lock_count += 1;
+        env.storage().persistent().set(&key, &bucket);
+    }
+
+    pub fn track_settlement(env: &Env, count: u64) {
+        if count == 0 {
+            return;
+        }
+        let timestamp = env.ledger().timestamp();
+        let last_lock_opt: Option<u64> = env.storage().persistent().get(&DataKey::TwaLastLock);
+        if let Some(last_lock) = last_lock_opt {
+            let settlement_time = if timestamp > last_lock {
+                timestamp - last_lock
+            } else {
+                0
+            };
+            let total_settlement_time = settlement_time * count;
+
+            let period_id = get_period_id(timestamp);
+            let index = get_bucket_index(timestamp);
+            let key = DataKey::TwaBucket(index);
+
+            let mut bucket: TwaBucket = env.storage().persistent().get(&key).unwrap_or(TwaBucket {
+                period_id,
+                sum_lock_amount: 0,
+                lock_count: 0,
+                sum_settlement_time: 0,
+                settlement_count: 0,
+            });
+
+            if bucket.period_id != period_id {
+                bucket.period_id = period_id;
+                bucket.sum_lock_amount = 0;
+                bucket.lock_count = 0;
+                bucket.sum_settlement_time = 0;
+                bucket.settlement_count = 0;
+            }
+
+            bucket.sum_settlement_time += total_settlement_time;
+            bucket.settlement_count += count;
+            env.storage().persistent().set(&key, &bucket);
+        }
+    }
+
+    pub fn get_metrics(env: &Env) -> TimeWeightedMetrics {
+        let timestamp = env.ledger().timestamp();
+        let current_period = get_period_id(timestamp);
+
+        let mut total_lock_amount: i128 = 0;
+        let mut total_lock_count: u64 = 0;
+        let mut total_settlement_time: u64 = 0;
+        let mut total_settlement_count: u64 = 0;
+
+        for i in 0..NUM_BUCKETS {
+            let key = DataKey::TwaBucket(i);
+            if let Some(bucket) = env.storage().persistent().get::<_, TwaBucket>(&key) {
+                if current_period >= bucket.period_id
+                    && current_period - bucket.period_id < NUM_BUCKETS
+                {
+                    total_lock_amount += bucket.sum_lock_amount;
+                    total_lock_count += bucket.lock_count;
+                    total_settlement_time += bucket.sum_settlement_time;
+                    total_settlement_count += bucket.settlement_count;
+                }
+            }
+        }
+
+        let avg_lock_size = if total_lock_count > 0 {
+            total_lock_amount / (total_lock_count as i128)
+        } else {
+            0
+        };
+
+        let avg_settlement_time_secs = if total_settlement_count > 0 {
+            total_settlement_time / total_settlement_count
+        } else {
+            0
+        };
+
+        TimeWeightedMetrics {
+            window_secs: NUM_BUCKETS * TWA_PERIOD_SECS,
+            avg_lock_size,
+            avg_settlement_time_secs,
+            lock_count: total_lock_count,
+            settlement_count: total_settlement_count,
         }
     }
 }
@@ -453,6 +639,20 @@ pub enum ProgramStatus {
     Active,
 }
 
+impl ProgramMetadata {
+    pub fn empty(env: &Env) -> Self {
+        Self {
+            program_name: None,
+            program_type: None,
+            ecosystem: None,
+            tags: soroban_sdk::vec![env],
+            start_date: None,
+            end_date: None,
+            custom_fields: soroban_sdk::vec![env],
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgramData {
@@ -471,6 +671,8 @@ pub struct ProgramData {
     pub archived: bool,
     pub archived_at: Option<u64>,
     pub status: ProgramStatus,
+    /// Schema version stamped at creation; immutable after init.
+    pub schema_version: u32,
 }
 
 // ========================================================================
@@ -536,9 +738,55 @@ pub struct DisputeResolvedEvent {
     pub resolved_at: u64,
 }
 
-// Event symbols for dispute lifecycle
-const DISPUTE_OPENED: Symbol = symbol_short!("DspOpen");
-const DISPUTE_RESOLVED: Symbol = symbol_short!("DspRslv");
+// Event symbols for dispute lifecycle - using namespace-protected symbols
+const DISPUTE_OPENED: Symbol = program_escrow::DISPUTE_OPENED;
+const DISPUTE_RESOLVED: Symbol = program_escrow::DISPUTE_RESOLVED;
+
+/// Bucket for a single period of time-weighted metrics
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TwaBucket {
+    pub period_id: u64,
+    pub sum_lock_amount: i128,
+    pub lock_count: u64,
+    pub sum_settlement_time: u64,
+    pub settlement_count: u64,
+}
+
+/// Returned view of aggregated time-weighted metrics over the entire window
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TimeWeightedMetrics {
+    pub window_secs: u64,
+    pub avg_lock_size: i128,
+    pub avg_settlement_time_secs: u64,
+    pub lock_count: u64,
+    pub settlement_count: u64,
+}
+
+// Event symbol for payout key rotation
+const PAYOUT_KEY_ROTATED: Symbol = symbol_short!("KeyRot");
+
+/// Event emitted when the authorized payout key is rotated for a program.
+///
+/// Integrators should listen for this event and update any cached key references
+/// immediately — the old key is invalidated as soon as this event is emitted.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutKeyRotatedEvent {
+    /// Schema version for forward-compatibility.
+    pub version: u32,
+    /// The program whose payout key was rotated.
+    pub program_id: String,
+    /// The address that authorized the rotation (admin or current payout key).
+    pub rotated_by: Address,
+    /// The new authorized payout key.
+    pub new_key: Address,
+    /// Monotonic nonce at the time of rotation (replay protection).
+    pub nonce: u64,
+    /// Ledger timestamp of the rotation.
+    pub rotated_at: u64,
+}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -561,6 +809,8 @@ pub enum DataKey {
     DependencyStatus(String),        // program_id -> DependencyStatus
     Dispute,  
     DisputeRecord(String),                     // DisputeRecord (single active dispute per contract)
+    TwaLastLock,                     // u64
+    TwaBucket(u64),                  // index -> TwaBucket
 }
 
 #[contracttype]
@@ -889,6 +1139,7 @@ mod test_token_math;
 #[cfg(test)]
 mod test_storage_layout;
 // mod test_payout_splits;
+mod test_batch_limits;
 
 // ========================================================================
 // Contract Implementation
@@ -969,7 +1220,10 @@ impl ProgramEscrowContract {
         env.storage().instance().set(&RECEIPT_ID, &id);
         id
     }
+}
 
+#[contractimpl]
+impl ProgramEscrowContract {
     /// Initialize a new program escrow
     ///
     /// # Arguments
@@ -997,6 +1251,27 @@ impl ProgramEscrowContract {
             initial_liquidity,
             reference_hash,
         )
+    }
+
+    /// Publish a program, transitioning it from Draft → Active status.
+    /// This must be called before lock_program_funds() or payouts can occur.
+    /// Only the program creator/admin can call this.
+    pub fn publish_program(env: Env) -> ProgramData {
+        let admin = Self::require_admin(&env);
+        let mut program_data: ProgramData = env
+            .storage()
+            .instance()
+            .get(&PROGRAM_DATA)
+            .expect("Program not initialized");
+
+        if program_data.status == ProgramStatus::Active {
+            panic!("Program is already published");
+        }
+
+        program_data.status = ProgramStatus::Active;
+        env.storage().instance().set(&PROGRAM_DATA, &program_data);
+        let _ = admin;
+        program_data
     }
 
     pub fn initialize_program(
@@ -1079,19 +1354,12 @@ impl ProgramEscrowContract {
             token_address: token_address.clone(),
             initial_liquidity: init_liquidity,
             risk_flags: 0,
-            metadata: ProgramMetadata {
-                program_name: None,
-                program_type: None,
-                ecosystem: None,
-                tags: Vec::new(&env),
-                start_date: None,
-                end_date: None,
-                custom_fields: soroban_sdk::Vec::new(&env),
-            },
+            metadata: ProgramMetadata::empty(&env),
             reference_hash,
             archived: false,
             archived_at: None,
             status: ProgramStatus::Draft,
+            schema_version: STORAGE_SCHEMA_VERSION,
         };
 
         // Store program data in registry
@@ -1192,6 +1460,18 @@ impl ProgramEscrowContract {
             },
         );
 
+        // Strict mode: verify post-init balance consistency
+        strict_mode::strict_assert_balance_sane(
+            program_data.total_funds,
+            program_data.remaining_balance,
+            "init_program",
+        );
+        strict_mode::strict_assert_eq(
+            program_data.total_funds,
+            program_data.remaining_balance,
+            "init_program: total_funds must equal remaining_balance after init",
+        );
+
         program_data
     }
 
@@ -1238,6 +1518,7 @@ impl ProgramEscrowContract {
         );
 
         if let Some(program_metadata) = metadata {
+            let program_id = program_data.program_id.clone();
             program_data.metadata = program_metadata;
             Self::store_program_data(&env, &program_id, &program_data);
         }
@@ -1275,18 +1556,17 @@ impl ProgramEscrowContract {
         let mut skipped = 0;
 
         for id in registry.iter() {
-            if let Some(program) = env
-                .storage()
-                .instance()
-                .get::<_, ProgramData>(&DataKey::Program(id.clone()))
-            {
-                if let Some(ptype) = program.metadata.program_type {
-                    if ptype == program_type {
-                        if skipped < start {
-                            skipped += 1;
-                        } else if count < limit {
-                            result.push_back(id.clone());
-                            count += 1;
+            if let Some(program) = env.storage().instance().get::<_, ProgramData>(&DataKey::Program(id.clone())) {
+                {
+                    let meta = &program.metadata;
+                    if let Some(ptype) = &meta.program_type {
+                        if *ptype == program_type {
+                            if skipped < start {
+                                skipped += 1;
+                            } else if count < limit {
+                                result.push_back(id.clone());
+                                count += 1;
+                            }
                         }
                     }
                 }
@@ -1296,29 +1576,51 @@ impl ProgramEscrowContract {
     }
 
     /// Query programs by ecosystem
-    pub fn query_programs_by_ecosystem(
-        env: Env,
-        ecosystem: String,
-        start: u32,
-        limit: u32,
-    ) -> soroban_sdk::Vec<String> {
-        let registry: soroban_sdk::Vec<String> = env
-            .storage()
-            .instance()
-            .get(&PROGRAM_REGISTRY)
-            .unwrap_or(soroban_sdk::Vec::new(&env));
+    pub fn query_programs_by_ecosystem(env: Env, ecosystem: String, start: u32, limit: u32) -> soroban_sdk::Vec<String> {
+        let registry: soroban_sdk::Vec<String> = env.storage().instance().get(&PROGRAM_REGISTRY).unwrap_or(soroban_sdk::Vec::new(&env));
         let mut result = soroban_sdk::Vec::new(&env);
         let mut count = 0;
         let mut skipped = 0;
 
         for id in registry.iter() {
-            if let Some(program) = env
-                .storage()
-                .instance()
-                .get::<_, ProgramData>(&DataKey::Program(id.clone()))
-            {
-                if let Some(eco) = program.metadata.ecosystem {
-                    if eco == ecosystem {
+            if let Some(program) = env.storage().instance().get::<_, ProgramData>(&DataKey::Program(id.clone())) {
+                {
+                    let meta = &program.metadata;
+                    if let Some(eco) = &meta.ecosystem {
+                        if *eco == ecosystem {
+                            if skipped < start {
+                                skipped += 1;
+                            } else if count < limit {
+                                result.push_back(id.clone());
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// Query programs by tag
+    pub fn query_programs_by_tag(env: Env, tag: String, start: u32, limit: u32) -> soroban_sdk::Vec<String> {
+        let registry: soroban_sdk::Vec<String> = env.storage().instance().get(&PROGRAM_REGISTRY).unwrap_or(soroban_sdk::Vec::new(&env));
+        let mut result = soroban_sdk::Vec::new(&env);
+        let mut count = 0;
+        let mut skipped = 0;
+
+        for id in registry.iter() {
+            if let Some(program) = env.storage().instance().get::<_, ProgramData>(&DataKey::Program(id.clone())) {
+                {
+                    let meta = &program.metadata;
+                    let mut has_tag = false;
+                    for t in meta.tags.iter() {
+                        if t == tag {
+                            has_tag = true;
+                            break;
+                        }
+                    }
+                    if has_tag {
                         if skipped < start {
                             skipped += 1;
                         } else if count < limit {
@@ -1329,48 +1631,6 @@ impl ProgramEscrowContract {
                 }
             }
         }
-        result
-    }
-
-    /// Query programs by tag
-    pub fn query_programs_by_tag(
-        env: Env,
-        tag: String,
-        start: u32,
-        limit: u32,
-    ) -> soroban_sdk::Vec<String> {
-        let registry: soroban_sdk::Vec<String> = env
-            .storage()
-            .instance()
-            .get(&PROGRAM_REGISTRY)
-            .unwrap_or(soroban_sdk::Vec::new(&env));
-        let mut result = soroban_sdk::Vec::new(&env);
-        let mut count = 0;
-        let mut skipped = 0;
-
-        for id in registry.iter() {
-            if let Some(program) = env
-                .storage()
-                .instance()
-                .get::<_, ProgramData>(&DataKey::Program(id.clone()))
-            {
-                let mut has_tag = false;
-                for t in program.metadata.tags.iter() {
-                    if t == tag {
-                        has_tag = true;
-                        break;
-                    }
-                }
-                if has_tag {
-                    if skipped < start {
-                            skipped += 1;
-                        } else if count < limit {
-                            result.push_back(id.clone());
-                            count += 1;
-                        }
-                    }
-                }
-            }
         result
     }
 
@@ -1430,19 +1690,12 @@ impl ProgramEscrowContract {
                 token_address: token_address.clone(),
                 initial_liquidity: 0,
                 risk_flags: 0,
-                metadata: ProgramMetadata {
-                program_name: None,
-                program_type: None,
-                ecosystem: None,
-                tags: soroban_sdk::Vec::new(&env),
-                start_date: None,
-                end_date: None,
-                custom_fields: soroban_sdk::Vec::new(&env),
-            },
+                metadata: ProgramMetadata::empty(&env),
                 reference_hash: item.reference_hash.clone(),
                 archived: false,
                 archived_at: None,
                 status: ProgramStatus::Draft,
+                schema_version: STORAGE_SCHEMA_VERSION,
             };
             let program_key = DataKey::Program(program_id.clone());
             env.storage().instance().set(&program_key, &program_data);
@@ -1592,6 +1845,13 @@ impl ProgramEscrowContract {
         env.storage().instance().set(&FEE_CONFIG, &cfg);
     }
 
+    /// Retrieve time-weighted average metrics for program health.
+    /// Returns aggregated data such as lock sizes and settlement times
+    /// over a 24-hour sliding window, manipulation-resistant and fully on-chain.
+    pub fn get_time_weighted_metrics(env: Env) -> TimeWeightedMetrics {
+        twa_metrics::get_metrics(&env)
+    }
+
     pub fn set_lock_fee_rate(env: Env, lock_fee_rate: i128) {
         Self::update_fee_config(env, Some(lock_fee_rate), None, None, None, None, None);
     }
@@ -1665,6 +1925,9 @@ impl ProgramEscrowContract {
         }
 
         // 3. Operational state: paused
+        if Self::is_read_only(env.clone()) {
+            panic!("Read-only mode");
+        }
         if Self::check_paused(&env, symbol_short!("lock")) {
             panic!("Funds Paused");
         }
@@ -1715,6 +1978,8 @@ impl ProgramEscrowContract {
         program_data.total_funds = crate::token_math::safe_add(program_data.total_funds, net_amount);
 
         program_data.remaining_balance = crate::token_math::safe_add(program_data.remaining_balance, net_amount);
+
+        twa_metrics::track_lock(&env, net_amount);
 
         // Store updated data
         env.storage().instance().set(&PROGRAM_DATA, &program_data);
@@ -2088,6 +2353,7 @@ impl ProgramEscrowContract {
 
         program_data
     }
+
 
     /// Set risk flags for a program (admin only).
     pub fn set_program_risk_flags(env: Env, program_id: String, flags: u32) -> ProgramData {
@@ -2591,6 +2857,10 @@ impl ProgramEscrowContract {
             reentrancy_guard::clear_entered(&env);
             panic!("Cannot process empty batch");
         }
+        if recipients.len() > MAX_BATCH_SIZE {
+            reentrancy_guard::clear_entered(&env);
+            panic!("Batch size exceeds MAX_BATCH_SIZE limit of 100");
+        }
 
         // Calculate total payout amount
         let mut total_payout: i128 = 0;
@@ -2671,6 +2941,8 @@ impl ProgramEscrowContract {
         let mut updated_data = program_data.clone();
         updated_data.remaining_balance -= total_payout;
         updated_data.payout_history = updated_history;
+
+        twa_metrics::track_settlement(&env, recipients.len() as u64);
 
         // Store updated data
         env.storage().instance().set(&PROGRAM_DATA, &updated_data);
@@ -2841,6 +3113,8 @@ impl ProgramEscrowContract {
         let mut updated_data = program_data.clone();
         updated_data.remaining_balance -= amount;
         updated_data.payout_history = updated_history;
+
+        twa_metrics::track_settlement(&env, 1);
 
         env.storage().instance().set(&PROGRAM_DATA, &updated_data);
 
@@ -3158,6 +3432,8 @@ impl ProgramEscrowContract {
         program_data.total_funds = crate::token_math::safe_add(program_data.total_funds, amount);
         program_data.remaining_balance = crate::token_math::safe_add(program_data.remaining_balance, net_amount);
 
+        twa_metrics::track_lock(&env, net_amount);
+
         env.storage().instance().set(&program_key, &program_data);
 
         // Sync with global if applicable
@@ -3265,6 +3541,8 @@ impl ProgramEscrowContract {
 
         let token_client = token::Client::new(&env, &program_data.token_address);
         token_client.transfer(&env.current_contract_address(), &recipient, &amount);
+
+        twa_metrics::track_settlement(&env, 1);
 
         program_data.remaining_balance -= amount;
         env.storage().instance().set(&program_key, &program_data);
@@ -4039,7 +4317,137 @@ impl ProgramEscrowContract {
         env.storage().instance().get(&DataKey::Dispute)
     }
 
-    /// Get reputation metrics for the current program.
+    // ========================================================================
+    // Payout Key Rotation
+    // ========================================================================
+
+    /// Rotate the authorized payout key for a program.
+    ///
+    /// ## Authorization
+    ///
+    /// Only two principals may call this function:
+    /// - The **current** `authorized_payout_key` of the program, OR
+    /// - The **contract admin** (set via `initialize_contract` / `set_admin`).
+    ///
+    /// Both callers must satisfy `require_auth()` — i.e. the transaction must
+    /// carry a valid signature from the authorizing address.
+    ///
+    /// ## Replay Protection
+    ///
+    /// A per-program monotonic `nonce` is stored on-chain.  The caller must
+    /// supply the **current** nonce value; the contract increments it atomically
+    /// before writing the new key.  This prevents replayed rotation transactions
+    /// from a compromised key from being re-submitted on a different ledger.
+    ///
+    /// ## Old-Key Invalidation
+    ///
+    /// The old key is invalidated **immediately** upon successful rotation.
+    /// Any in-flight transaction signed by the old key that has not yet been
+    /// included in a ledger will be rejected once this rotation is confirmed.
+    ///
+    /// ## Timelock
+    ///
+    /// No timelock is enforced at the contract level.  If a product-level
+    /// timelock is desired, it should be implemented in the off-chain
+    /// orchestration layer before submitting the rotation transaction.
+    ///
+    /// ## Arguments
+    ///
+    /// - `program_id`  — The program whose key is being rotated.
+    /// - `caller`      — The address authorizing the rotation (must be current
+    ///                   payout key or admin).
+    /// - `new_key`     — The replacement authorized payout key.
+    /// - `nonce`       — The current on-chain nonce (must match exactly).
+    ///
+    /// ## Panics
+    ///
+    /// - `"Program not found"` — `program_id` does not exist.
+    /// - `"Unauthorized"` — `caller` is neither the current payout key nor admin.
+    /// - `"Invalid nonce"` — supplied nonce does not match the stored nonce.
+    /// - `"New key must differ from current key"` — rotating to the same address
+    ///   is a no-op and is rejected to prevent accidental misuse.
+    ///
+    /// ## Events
+    ///
+    /// Emits `PayoutKeyRotatedEvent` on success.
+    pub fn rotate_payout_key(
+        env: Env,
+        program_id: String,
+        caller: Address,
+        new_key: Address,
+        nonce: u64,
+    ) -> ProgramData {
+        // 1. Load program — panics if not found.
+        let mut program_data = Self::get_program_data_by_id(&env, &program_id);
+
+        // 2. Authorize: caller must be current payout key or contract admin.
+        caller.require_auth();
+
+        let is_current_key = caller == program_data.authorized_payout_key;
+        let is_admin = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::Admin)
+            .map(|admin| admin == caller)
+            .unwrap_or(false);
+
+        if !is_current_key && !is_admin {
+            panic!("Unauthorized");
+        }
+
+        // 3. Replay protection: nonce must match stored value.
+        let stored_nonce: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RotationNonce(program_id.clone()))
+            .unwrap_or(0u64);
+
+        if nonce != stored_nonce {
+            panic!("Invalid nonce");
+        }
+
+        // 4. Guard against no-op rotation.
+        if new_key == program_data.authorized_payout_key {
+            panic!("New key must differ from current key");
+        }
+
+        // 5. Atomically increment nonce before mutating state (prevents replay
+        //    even if the transaction is somehow re-submitted).
+        env.storage()
+            .instance()
+            .set(&DataKey::RotationNonce(program_id.clone()), &(stored_nonce + 1));
+
+        // 6. Swap the key.
+        program_data.authorized_payout_key = new_key.clone();
+        Self::store_program_data(&env, &program_id, &program_data);
+
+        // 7. Emit auditable event.
+        env.events().publish(
+            (PAYOUT_KEY_ROTATED,),
+            PayoutKeyRotatedEvent {
+                version: EVENT_VERSION_V2,
+                program_id: program_id.clone(),
+                rotated_by: caller,
+                new_key,
+                nonce: stored_nonce + 1,
+                rotated_at: env.ledger().timestamp(),
+            },
+        );
+
+        program_data
+    }
+
+    /// Return the current rotation nonce for a program.
+    ///
+    /// Integrators should read this before constructing a `rotate_payout_key`
+    /// transaction to avoid nonce-mismatch panics.
+    pub fn get_rotation_nonce(env: Env, program_id: String) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::RotationNonce(program_id))
+            .unwrap_or(0u64)
+    }
+
     /// Computes reputation based on schedules, payouts, and funds.
     /// Returns zero overall_score_bps if any releases are overdue (penalty for missed milestones).
     pub fn get_program_reputation(env: Env) -> ProgramReputation {
@@ -4149,13 +4557,12 @@ impl ProgramEscrowContract {
     }
 }
 
-// mod test;
-// mod test_archival;
-// mod test_batch_operations;
-
-// mod test_pause;
-
 #[cfg(test)]
+mod test;
+#[cfg(test)]
+mod test_pause;
+#[cfg(test)]
+mod test_time_weighted_metrics;
 // mod rbac_tests;
 #[cfg(test)]
 mod test_metadata_tagging;
@@ -4163,3 +4570,6 @@ mod test_metadata_tagging;
 #[cfg(test)]
 #[cfg(any())]
 mod rbac_tests;
+
+#[cfg(test)]
+mod test_rbac;

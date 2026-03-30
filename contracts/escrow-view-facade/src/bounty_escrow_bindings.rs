@@ -47,6 +47,7 @@ pub struct Escrow {
     pub remaining_amount: i128,
     pub status: EscrowStatus,
     pub deadline: u64,
+    pub schema_version: u32,
 }
 
 #[contracttype]

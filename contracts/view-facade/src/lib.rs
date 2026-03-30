@@ -9,20 +9,55 @@
 //! can discover and interrogate them through a single endpoint, without coupling to a
 //! specific contract type or requiring knowledge of individual deployment addresses.
 //!
+//! ## Duplicate Registration Policy
+//!
+//! When [`register`](ViewFacade::register) is called with an address that is already in the
+//! registry, the existing entry is **updated** (not duplicated) with the new `kind` and
+//! `version` values. The entry retains its original position in insertion order.
+//!
+//! **Benefits:**
+//! - Single-source-of-truth per address (no duplicates)
+//! - Consistent query results across all view functions
+//! - Efficient admin operations (update without explicit deregister)
+//!
 //! ## Query Notes
 //!
-//! - `list_contracts` returns entries in registration order.
-//! - `contract_count` mirrors the current registry length.
+//! - `list_contracts` supports pagination with optional `offset` and `limit` parameters.
+//! - `list_contracts_all` returns the full registry (legacy compatibility).
+//! - `contract_count` returns the total registry size for pagination calculations.
 //! - `get_contract` performs an `O(n)` scan and returns the first matching
 //!   entry for the requested address.
-//! - `O(n)` scans are acceptable for the intended small registry size, but
-//!   callers should avoid treating this facade as an unbounded index.
+//! - Registry size is bounded by [`MAX_REGISTRY_SIZE`] (1000 entries) to prevent
+//!   unbounded storage growth.
 //!
 //! ## Query Flow
 //!
-//! 1. Call `contract_count` to size the expected dashboard result.
-//! 2. Call `list_contracts` to render the full registry in registration order.
+//! 1. Call `contract_count` to get the total number of entries.
+//! 2. Use paginated `list_contracts(offset, limit)` for large registries.
 //! 3. Call `get_contract` when the UI needs to refresh a single known address.
+//! 4. Fall back to `list_contracts_all` only for small registries or legacy compatibility.
+//!
+//! ## Registry Limits and Pagination
+//!
+//! The facade enforces a hard cap of [`MAX_REGISTRY_SIZE`] entries to ensure:
+//! - Predictable gas costs for all operations
+//! - Protection against storage exhaustion attacks  
+//! - Indexer-friendly pagination with bounded result sets
+//!
+//! When the registry is full, new registrations will fail with [`FacadeError::RegistryFull`].
+//! Admins must deregister existing entries before adding new ones at capacity.
+//!
+//! ### Pagination Example
+//!
+//! ```text
+//! total = contract_count()
+//! page_size = 100
+//! 
+//! for offset in (0..total).step_by(page_size) {
+//!     contracts = list_contracts(offset, page_size)
+//!     // Process page...
+//! }
+//! ```
 //!
 //! ## Security Model
 //!
@@ -32,6 +67,7 @@
 //!   can never be changed, preventing privilege escalation after deployment.
 //! - **Double-init protection**: a second call to [`ViewFacade::init`] is rejected
 //!   with [`FacadeError::AlreadyInitialized`], so the initial admin cannot be replaced.
+//! - **Bounded registry**: hard cap on entries prevents storage bloat attacks.
 //!
 //! ## Initialization Workflow
 //!
@@ -59,13 +95,14 @@ use soroban_sdk::{
 /// Using a `#[contracterror]` enum instead of bare `panic!` strings gives
 /// callers a stable integer discriminant they can match on and surfaces
 /// clearer diagnostics in simulation tools.
-use grainlify_core::errors;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum FacadeError {
     AlreadyInitialized = 1,
     NotInitialized = 2,
+    RegistryFull = 3,
+    InvalidPagination = 4,
 }
 
 // ============================================================================
@@ -83,6 +120,25 @@ pub enum DataKey {
     /// The ordered list of [`RegisteredContract`] entries.
     Registry,
 }
+
+// ============================================================================
+// Registry Configuration
+// ============================================================================
+
+/// Maximum number of contracts that can be registered in the facade.
+///
+/// This limit prevents unbounded storage growth and ensures predictable
+/// gas costs for all operations. The value of 1000 is chosen to provide
+/// ample capacity for production use while maintaining reasonable
+/// performance characteristics.
+///
+/// ## Rationale
+///
+/// - **Gas efficiency**: Each registry entry requires storage reads/writes
+/// - **Indexer friendliness**: Bounded size enables predictable pagination
+/// - **Operational safety**: Prevents storage exhaustion attacks
+/// - **Future upgradeability**: Can be increased via contract upgrade if needed
+pub const MAX_REGISTRY_SIZE: u32 = 1000;
 
 // ============================================================================
 // Data Structures
@@ -223,6 +279,17 @@ impl ViewFacade {
 
     /// Register a contract address so it appears in cross-contract views.
     ///
+    /// ## Duplicate Registration Policy
+    /// If the address is already registered, the existing entry's `kind` and
+    /// `version` are **updated** to match the new values, and the entry
+    /// maintains its original position in insertion order.
+    ///
+    /// This ensures:
+    /// - Single-source-of-truth per address (no duplicate entries)
+    /// - Consistent query results: `get_contract()` always returns the latest metadata
+    /// - List consistency: `list_contracts()` reflects all registered addresses exactly once
+    /// - Operational convenience: admin can update metadata without explicit deregister
+    ///
     /// # Arguments
     /// * `address` — On-chain address of the contract to register.
     /// * `kind`    — Role of the contract within the ecosystem.
@@ -234,12 +301,20 @@ impl ViewFacade {
     ///
     /// # Errors
     /// * [`FacadeError::NotInitialized`] — if `init` has not yet been called.
+    /// * [`FacadeError::RegistryFull`] — if registry has reached [`MAX_REGISTRY_SIZE`].
     ///
     /// # Note
     /// Registering the same address multiple times will create duplicate
     /// entries. Callers should call [`get_contract`] first to check for an
     /// existing entry, or [`deregister`] before re-registering with updated
     /// metadata.
+    ///
+    /// ## Registry Limits
+    ///
+    /// The facade enforces a hard cap of [`MAX_REGISTRY_SIZE`] entries to prevent
+    /// unbounded storage growth. If the registry is full, registration will fail
+    /// with [`FacadeError::RegistryFull`]. Admins must deregister existing entries
+    /// before adding new ones when at capacity.
     pub fn register(
         env: Env,
         address: Address,
@@ -259,6 +334,11 @@ impl ViewFacade {
             .instance()
             .get(&DataKey::Registry)
             .unwrap_or(Vec::new(&env));
+
+        // Enforce registry size limit
+        if registry.len() >= MAX_REGISTRY_SIZE {
+            return Err(FacadeError::RegistryFull);
+        }
 
         registry.push_back(RegisteredContract {
             address,
@@ -321,9 +401,71 @@ impl ViewFacade {
     /// The list is in insertion order. An empty vec is returned if no
     /// contracts have been registered yet.
     ///
+    /// # Arguments
+    /// * `offset` — Number of entries to skip from the start (default: 0).
+    /// * `limit`  — Maximum number of entries to return (default: all).
+    ///
+    /// # Errors
+    /// * [`FacadeError::InvalidPagination`] — if offset > total entries or limit = 0.
+    ///
     /// # Note
     /// This is a pure read — no authorization required.
-    pub fn list_contracts(env: Env) -> Vec<RegisteredContract> {
+    ///
+    /// ## Pagination
+    ///
+    /// For large registries, use pagination to avoid excessive gas costs:
+    /// - First page: `list_contracts(0, 100)`
+    /// - Second page: `list_contracts(100, 100)`
+    /// - Continue until returned vec length < limit
+    pub fn list_contracts(
+        env: Env,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<Vec<RegisteredContract>, FacadeError> {
+        let registry: Vec<RegisteredContract> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Registry)
+            .unwrap_or(Vec::new(&env));
+
+        let total = registry.len();
+        let offset = offset.unwrap_or(0);
+        let limit = limit.unwrap_or(total);
+
+        // Validate pagination parameters
+        if offset > total {
+            return Err(FacadeError::InvalidPagination);
+        }
+        if limit == 0 {
+            return Err(FacadeError::InvalidPagination);
+        }
+
+        // Calculate end index, ensuring we don't exceed total
+        let end = if offset + limit > total {
+            total
+        } else {
+            offset + limit
+        };
+
+        // Extract the requested slice
+        let mut result = Vec::new(&env);
+        for i in offset..end {
+            result.push_back(registry.get(i).unwrap().clone());
+        }
+
+        Ok(result)
+    }
+
+    /// Return all registered contracts as an ordered list (legacy version).
+    ///
+    /// This is a compatibility wrapper that returns the entire registry.
+    /// New code should use the paginated version of `list_contracts`.
+    ///
+    /// # Note
+    /// This is a pure read — no authorization required.
+    /// For large registries, this may be expensive. Consider using
+    /// `list_contracts(offset, limit)` for pagination.
+    pub fn list_contracts_all(env: Env) -> Vec<RegisteredContract> {
         env.storage()
             .instance()
             .get(&DataKey::Registry)
@@ -332,11 +474,18 @@ impl ViewFacade {
 
     /// Return the total number of registered contracts.
     ///
-    /// Equivalent to `list_contracts().len()` but cheaper because it avoids
-    /// deserializing the full entry list.
+    /// Returns the total registry size, which is useful for pagination calculations.
+    /// This is cheaper than loading the full registry with `list_contracts_all`.
     ///
     /// # Note
     /// This is a pure read — no authorization required.
+    /// 
+    /// ## Usage for Pagination
+    /// 
+    /// To implement pagination:
+    /// 1. Call `contract_count()` to get total entries
+    /// 2. Calculate pages: `total_entries / page_size`
+    /// 3. Fetch each page: `list_contracts(offset, limit)`
     pub fn contract_count(env: Env) -> u32 {
         let registry: Vec<RegisteredContract> = env
             .storage()

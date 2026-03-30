@@ -29,6 +29,7 @@ const sidebars = {
         'for-contributors',
         'for-maintainers',
         'for-ecosystems',
+        'program-escrow-setup-flow',
         'profile-page',
       ],
     },

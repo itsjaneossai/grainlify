@@ -17,7 +17,7 @@ fn setup_contract(env: &Env) -> (GrainlifyContractClient<'_>, Address) {
     (client, admin)
 }
 
-fn default_governance_config() -> GovernanceConfig {
+fn default_governance_config(env: &Env) -> GovernanceConfig {
     GovernanceConfig {
         voting_period: 86400,
         execution_delay: 3600,
@@ -25,6 +25,7 @@ fn default_governance_config() -> GovernanceConfig {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(env),
     }
 }
 
@@ -170,7 +171,7 @@ fn test_init_governance_success() {
     let client = GrainlifyContractClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    let gov_config = default_governance_config();
+    let gov_config = default_governance_config(&env);
 
     // Initialize with governance
     client.init_governance(&admin, &gov_config);
@@ -214,6 +215,7 @@ fn test_init_governance_prevents_reinit() {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     // First initialization
@@ -241,6 +243,7 @@ fn test_init_governance_blocked_after_init_admin() {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     // First initialize with admin
@@ -272,6 +275,7 @@ fn test_init_governance_rejects_invalid_quorum() {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -295,6 +299,7 @@ fn test_init_governance_rejects_invalid_approval_threshold() {
         approval_threshold: 10001, // Invalid: > 10000
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -318,6 +323,7 @@ fn test_init_governance_rejects_low_approval_threshold() {
         approval_threshold: 4999, // Invalid: < 5000
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -340,6 +346,7 @@ fn test_init_governance_accepts_exact_threshold() {
         approval_threshold: 5000, // Exactly 50%
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -366,6 +373,7 @@ fn test_init_governance_accepts_max_thresholds() {
         approval_threshold: 10000, // 100%
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -485,6 +493,7 @@ fn test_check_invariants_healthy_after_init_governance() {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -579,6 +588,7 @@ fn test_all_init_paths_mutually_exclusive() {
             approval_threshold: 6000,
             min_proposal_stake: 1000,
             voting_scheme: VotingScheme::OnePersonOneVote,
+            governance_token: Address::generate(&env),
         };
 
         client.init(&signers, &2u32);
@@ -620,6 +630,7 @@ fn test_all_init_paths_mutually_exclusive() {
             approval_threshold: 6000,
             min_proposal_stake: 1000,
             voting_scheme: VotingScheme::OnePersonOneVote,
+            governance_token: Address::generate(&env),
         };
 
         // Try to initialize with governance - should fail
@@ -660,7 +671,7 @@ fn test_init_with_network_blocked_after_governance_init() {
     let client = GrainlifyContractClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    let gov_config = default_governance_config();
+    let gov_config = default_governance_config(&env);
     client.init_governance(&admin, &gov_config);
 
     let chain_id = String::from_str(&env, "stellar");
@@ -691,6 +702,7 @@ fn test_init_governance_with_token_weighted_voting() {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::TokenWeighted,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
@@ -717,6 +729,7 @@ fn test_init_governance_with_zero_voting_period() {
         approval_threshold: 6000,
         min_proposal_stake: 1000,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     // Should still succeed (governance doesn't validate voting period)
@@ -743,6 +756,7 @@ fn test_init_governance_max_config() {
         approval_threshold: 10000,
         min_proposal_stake: i128::MAX,
         voting_scheme: VotingScheme::OnePersonOneVote,
+        governance_token: Address::generate(&env),
     };
 
     client.init_governance(&admin, &gov_config);
