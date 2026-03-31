@@ -600,7 +600,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "u64": 3
+                  "u64": 5
                 }
               }
             },
@@ -714,6 +714,20 @@
                     },
                     {
                       "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "deadline"
                       },
                       "val": {
@@ -815,6 +829,20 @@
                           "lo": 2000
                         }
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {
@@ -963,6 +991,20 @@
                           "lo": 3000
                         }
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {
@@ -1203,7 +1245,7 @@
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 2
                         }
                       }
                     ]
@@ -3918,6 +3960,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "trigger_type"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "AdminApproval"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "version"
                   },
                   "val": {
@@ -3977,6 +4031,62 @@
                 "hi": 0,
                 "lo": 3000
               }
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000005",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "metric"
+              },
+              {
+                "symbol": "op"
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "caller"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "operation"
+                  },
+                  "val": {
+                    "symbol": "refund"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "success"
+                  },
+                  "val": {
+                    "bool": true
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "timestamp"
+                  },
+                  "val": {
+                    "u64": 501
+                  }
+                }
+              ]
             }
           }
         }
@@ -4195,6 +4305,20 @@
                           },
                           {
                             "key": {
+                              "symbol": "archived"
+                            },
+                            "val": {
+                              "bool": false
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "archived_at"
+                            },
+                            "val": "void"
+                          },
+                          {
+                            "key": {
                               "symbol": "deadline"
                             },
                             "val": {
@@ -4335,6 +4459,20 @@
                                 "lo": 2000
                               }
                             }
+                          },
+                          {
+                            "key": {
+                              "symbol": "archived"
+                            },
+                            "val": {
+                              "bool": false
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "archived_at"
+                            },
+                            "val": "void"
                           },
                           {
                             "key": {

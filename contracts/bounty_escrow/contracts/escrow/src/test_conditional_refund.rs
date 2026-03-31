@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod test_conditional_refund {
     use crate::{
-        BountyEscrowContract, BountyEscrowContractClient, Error, EscrowStatus,
-        DisputeReason,
+        BountyEscrowContract, BountyEscrowContractClient, DisputeReason, Error, EscrowStatus,
     };
     use soroban_sdk::{
         testutils::{Address as _, Ledger},
@@ -27,7 +26,7 @@ mod test_conditional_refund {
         let depositor = Address::generate(&env);
         let oracle = Address::generate(&env);
 
-        let token_id = env.register_stellar_asset_contract(admin.clone());
+        let token_id = env.register_stellar_asset_contract_v2(admin.clone());
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
 
         let contract_id = env.register_contract(None, BountyEscrowContract);
@@ -148,7 +147,9 @@ mod test_conditional_refund {
         let s = setup();
         lock(&s, 1, 500);
         // Advance past deadline
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 600);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 600);
         // Any address (not admin, not depositor) can trigger
         client(&s).auto_refund(&1u64);
 
@@ -177,7 +178,9 @@ mod test_conditional_refund {
         lock(&s, 1, 500);
         let contributor = Address::generate(&s.env);
         client(&s).release_funds(&1u64, &contributor);
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 600);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 600);
         let result = client(&s).try_auto_refund(&1u64);
         assert_eq!(result.unwrap_err().unwrap(), Error::FundsNotLocked);
     }
@@ -186,7 +189,9 @@ mod test_conditional_refund {
     fn test_auto_refund_fails_already_refunded() {
         let s = setup();
         lock(&s, 1, 500);
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 600);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 600);
         client(&s).auto_refund(&1u64);
         // Second attempt
         let result = client(&s).try_auto_refund(&1u64);
@@ -202,7 +207,9 @@ mod test_conditional_refund {
         let contributor = Address::generate(&s.env);
         client(&s).release_funds(&1u64, &contributor);
         // Advance past deadline
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 600);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 600);
         // auto_refund must fail — already released
         let result = client(&s).try_auto_refund(&1u64);
         assert_eq!(result.unwrap_err().unwrap(), Error::FundsNotLocked);
@@ -224,7 +231,9 @@ mod test_conditional_refund {
     fn test_auto_refund_then_release_fails() {
         let s = setup();
         lock(&s, 1, 500);
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 600);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 600);
         client(&s).auto_refund(&1u64);
         let contributor = Address::generate(&s.env);
         let result = client(&s).try_release_funds(&1u64, &contributor);
@@ -237,7 +246,9 @@ mod test_conditional_refund {
     fn test_refund_event_includes_trigger_type_deadline() {
         let s = setup();
         lock(&s, 1, 500);
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 600);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 600);
         client(&s).auto_refund(&1u64);
 
         let escrow = client(&s).get_escrow_info(&1u64).unwrap();
@@ -268,12 +279,7 @@ mod test_conditional_refund {
         let s = setup();
         lock(&s, 1, 1000);
         // Admin approve + refund (existing path)
-        client(&s).approve_refund(
-            &1u64,
-            &1_000i128,
-            &s.depositor,
-            &crate::RefundMode::Full,
-        );
+        client(&s).approve_refund(&1u64, &1_000i128, &s.depositor, &crate::RefundMode::Full);
         client(&s).refund(&1u64);
 
         let escrow = client(&s).get_escrow_info(&1u64).unwrap();

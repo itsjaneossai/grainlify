@@ -22,7 +22,7 @@ echo "=================================="
 # Check if ajv-cli is installed
 if ! command -v ajv &> /dev/null; then
     echo -e "${RED}❌ ajv-cli is not installed${NC}"
-    echo "Please install it with: npm install -g ajv-cli"
+    echo "Please install it with: npm install -g ajv-cli ajv-formats"
     exit 1
 fi
 
@@ -54,12 +54,12 @@ for manifest in $MANIFESTS; do
     echo -e "\n${BLUE}📄 Validating $MANIFEST_NAME...${NC}"
     
     # Validate against schema
-    if ajv validate -s "$CONTRACTS_DIR/contract-manifest-schema.json" -d "$manifest" --verbose 2>/dev/null; then
+    if ajv validate --spec=draft2020 -c ajv-formats -s "$CONTRACTS_DIR/contract-manifest-schema.json" -d "$manifest" --verbose 2>/dev/null; then
         echo -e "${GREEN}✅ Schema validation passed${NC}"
         VALID_COUNT=$((VALID_COUNT + 1))
     else
         echo -e "${RED}❌ Schema validation failed${NC}"
-        ajv validate -s "$CONTRACTS_DIR/contract-manifest-schema.json" -d "$manifest" --verbose
+        ajv validate --spec=draft2020 -c ajv-formats -s "$CONTRACTS_DIR/contract-manifest-schema.json" -d "$manifest" --verbose
         continue
     fi
     

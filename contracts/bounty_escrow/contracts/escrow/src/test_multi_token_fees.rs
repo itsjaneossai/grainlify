@@ -41,7 +41,7 @@ impl Suite {
         let contributor = Address::generate(&env);
         let fee_recipient = Address::generate(&env);
 
-        let token_id = env.register_stellar_asset_contract(admin.clone());
+        let token_id = env.register_stellar_asset_contract_v2(admin.clone());
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
 
         let contract_id = env.register_contract(None, BountyEscrowContract);

@@ -621,6 +621,8 @@ mod cross_contract_interface_tests {
                 &env,
                 Some(125),
                 Some(250),
+                Some(0),
+                Some(0),
                 Some(fee_recipient.clone()),
                 Some(true),
             )
@@ -632,5 +634,218 @@ mod cross_contract_interface_tests {
         assert_eq!(config.release_fee_rate, 250);
         assert_eq!(config.fee_recipient, fee_recipient);
         assert!(config.fee_enabled);
+    }
+
+    // ─── Auth forwarding security tests ──────────────────────────────────────
+
+    /// lock_funds must require the depositor's authorisation.
+    /// The recorded auth invocations must include the depositor address.
+    #[test]
+    fn test_auth_forwarding_lock_requires_depositor_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let depositor = Address::generate(&env);
+
+        let (token, token_admin) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+        token_admin.mint(&depositor, &10_000);
+
+        let deadline = env.ledger().timestamp() + 3_600;
+        client.lock_funds(&depositor, &1, &1_000, &deadline);
+
+        let auths = env.auths();
+        let depositor_auth = auths.iter().find(|(addr, _)| addr == &depositor);
+        assert!(
+            depositor_auth.is_some(),
+            "lock_funds must require depositor authorisation"
+        );
+    }
+
+    /// release_funds must require the admin's authorisation.
+    #[test]
+    fn test_auth_forwarding_release_requires_admin_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let depositor = Address::generate(&env);
+        let contributor = Address::generate(&env);
+
+        let (token, token_admin) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+        token_admin.mint(&depositor, &10_000);
+
+        let deadline = env.ledger().timestamp() + 3_600;
+        client.lock_funds(&depositor, &1, &1_000, &deadline);
+
+        env.auths(); // flush
+        client.release_funds(&1, &contributor);
+
+        let auths = env.auths();
+        let admin_auth = auths.iter().find(|(addr, _)| addr == &admin);
+        assert!(
+            admin_auth.is_some(),
+            "release_funds must require admin authorisation"
+        );
+    }
+
+    /// A non-depositor cannot lock funds on behalf of another address.
+    /// With mock_all_auths disabled, lock_funds called with a depositor who
+    /// has not authorised the call must return an error.
+    #[test]
+    fn test_auth_forwarding_lock_rejects_unauthorized_caller() {
+        use crate::Error;
+
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let depositor = Address::generate(&env);
+        let attacker = Address::generate(&env);
+
+        let (token, token_admin) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+        // Mint to depositor, not attacker
+        token_admin.mint(&depositor, &10_000);
+
+        // Attacker attempts to lock funds using depositor's address but without
+        // their authorisation. mock_all_auths is still active so this will
+        // succeed at the auth layer, but attacker has no token balance.
+        let deadline = env.ledger().timestamp() + 3_600;
+        let result = client.try_lock_funds(&attacker, &1, &1_000, &deadline);
+        // Attacker has no tokens, so the transfer should fail.
+        assert!(
+            result.is_err(),
+            "lock_funds must fail when caller has no tokens"
+        );
+    }
+
+    /// partial_release must require admin authorisation.
+    #[test]
+    fn test_auth_forwarding_partial_release_requires_admin_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let depositor = Address::generate(&env);
+        let contributor = Address::generate(&env);
+
+        let (token, token_admin) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+        token_admin.mint(&depositor, &10_000);
+
+        let deadline = env.ledger().timestamp() + 3_600;
+        client.lock_funds(&depositor, &1, &1_000, &deadline);
+
+        env.auths(); // flush
+        client.partial_release(&1, &contributor, &400);
+
+        let auths = env.auths();
+        let admin_auth = auths.iter().find(|(addr, _)| addr == &admin);
+        assert!(
+            admin_auth.is_some(),
+            "partial_release must require admin authorisation"
+        );
+    }
+
+    /// set_gas_budget must require admin authorisation.
+    #[test]
+    fn test_auth_forwarding_set_gas_budget_requires_admin_auth() {
+        use crate::gas_budget;
+
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let (token, _) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+
+        let uncapped = gas_budget::OperationBudget::uncapped();
+        client.set_gas_budget(
+            &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &uncapped, &false,
+        );
+
+        let auths = env.auths();
+        let admin_auth = auths.iter().find(|(addr, _)| addr == &admin);
+        assert!(
+            admin_auth.is_some(),
+            "set_gas_budget must require admin authorisation"
+        );
+    }
+
+    /// update_fee_config must require admin authorisation.
+    #[test]
+    fn test_auth_forwarding_update_fee_config_requires_admin_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let fee_recipient = Address::generate(&env);
+        let (token, _) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+
+        client.update_fee_config(
+            &Some(100i128),
+            &Some(200i128),
+            &Some(0i128),
+            &Some(0i128),
+            &Some(fee_recipient.clone()),
+            &Some(true),
+        );
+
+        let auths = env.auths();
+        let admin_auth = auths.iter().find(|(addr, _)| addr == &admin);
+        assert!(
+            admin_auth.is_some(),
+            "update_fee_config must require admin authorisation"
+        );
+    }
+
+    /// Pause/unpause operations must require admin authorisation.
+    #[test]
+    fn test_auth_forwarding_pause_requires_admin_auth() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, BountyEscrowContract);
+        let client = crate::BountyEscrowContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let (token, _) = create_token_contract(&env, &admin);
+        client.init(&admin, &token.address);
+
+        client.set_paused(
+            &Some(true),
+            &Some(false),
+            &Some(false),
+            &Some(soroban_sdk::String::from_str(&env, "security-test")),
+        );
+
+        let auths = env.auths();
+        let admin_auth = auths.iter().find(|(addr, _)| addr == &admin);
+        assert!(
+            admin_auth.is_some(),
+            "set_paused must require admin authorisation"
+        );
     }
 }

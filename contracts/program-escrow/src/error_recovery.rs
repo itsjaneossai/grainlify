@@ -1353,7 +1353,8 @@ pub fn verify_batch_integrity(env: &Env, batch_id: u64) -> bool {
         let item = state.items.get(i).unwrap();
         match item.status {
             BatchItemStatus::Success => {
-                calculated_successful = crate::token_math::safe_add(calculated_successful, item.amount);
+                calculated_successful =
+                    crate::token_math::safe_add(calculated_successful, item.amount);
             }
             BatchItemStatus::Pending => {
                 calculated_pending = crate::token_math::safe_add(calculated_pending, item.amount);

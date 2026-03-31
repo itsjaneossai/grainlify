@@ -408,7 +408,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "u64": 2
+                  "u64": 3
                 }
               }
             },
@@ -519,6 +519,20 @@
                     },
                     {
                       "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "deadline"
                       },
                       "val": {
@@ -620,6 +634,20 @@
                           "lo": 2000
                         }
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {
@@ -857,7 +885,7 @@
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 2
                         }
                       }
                     ]

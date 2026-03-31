@@ -89,7 +89,9 @@ mod test_settlement_grace_periods {
         client.init(&admin, &token);
 
         // Enable grace period (500 seconds)
-        client.set_settlement_grace_period_config(&admin, &500, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &500, &true)
+            .unwrap();
 
         let bounty_id = 1u64;
         let amount: i128 = 1_000_0000;
@@ -128,7 +130,9 @@ mod test_settlement_grace_periods {
         client.init(&admin, &token);
 
         // Enable grace period (500 seconds)
-        client.set_settlement_grace_period_config(&admin, &500, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &500, &true)
+            .unwrap();
 
         let bounty_id = 1u64;
         let amount: i128 = 1_000_0000;
@@ -164,7 +168,9 @@ mod test_settlement_grace_periods {
         client.init(&admin, &token);
 
         // Enable grace period (500 seconds)
-        client.set_settlement_grace_period_config(&admin, &500, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &500, &true)
+            .unwrap();
 
         let bounty_id = 1u64;
         let amount: i128 = 1_000_0000;
@@ -176,7 +182,9 @@ mod test_settlement_grace_periods {
         env.ledger().set_timestamp(deadline + 250);
 
         // Admin approves refund - should work even in grace period
-        client.approve_refund(&bounty_id, &amount, &depositor).unwrap();
+        client
+            .approve_refund(&bounty_id, &amount, &depositor)
+            .unwrap();
 
         let result = client.try_refund(&bounty_id);
         assert!(result.is_ok());
@@ -203,7 +211,9 @@ mod test_settlement_grace_periods {
         client.init(&admin, &token);
 
         // Enable grace period (500 seconds)
-        client.set_settlement_grace_period_config(&admin, &500, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &500, &true)
+            .unwrap();
 
         let bounty_id = 1u64;
         let amount: i128 = 2_000_0000;
@@ -247,21 +257,27 @@ mod test_settlement_grace_periods {
         assert_eq!(config.grace_period_seconds, 0);
 
         // Enable with custom grace period
-        client.set_settlement_grace_period_config(&admin, &300, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &300, &true)
+            .unwrap();
 
         let config = client.get_settlement_grace_period_config();
         assert!(config.enabled);
         assert_eq!(config.grace_period_seconds, 300);
 
         // Update grace period
-        client.set_settlement_grace_period_config(&admin, &600, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &600, &true)
+            .unwrap();
 
         let config = client.get_settlement_grace_period_config();
         assert!(config.enabled);
         assert_eq!(config.grace_period_seconds, 600);
 
         // Disable
-        client.set_settlement_grace_period_config(&admin, &0, &false).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &0, &false)
+            .unwrap();
 
         let config = client.get_settlement_grace_period_config();
         assert!(!config.enabled);
@@ -303,7 +319,9 @@ mod test_settlement_grace_periods {
         client.init(&admin, &token);
 
         // Set grace period to 0 seconds with enabled = true (edge case)
-        client.set_settlement_grace_period_config(&admin, &0, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &0, &true)
+            .unwrap();
 
         let bounty_id = 1u64;
         let amount: i128 = 1_000_0000;
@@ -336,7 +354,9 @@ mod test_settlement_grace_periods {
 
         // Set large grace period (30 days = 2,592,000 seconds)
         let grace_period = 2_592_000u64;
-        client.set_settlement_grace_period_config(&admin, &grace_period, &true).unwrap();
+        client
+            .set_settlement_grace_period_config(&admin, &grace_period, &true)
+            .unwrap();
 
         let bounty_id = 1u64;
         let amount: i128 = 1_000_0000;

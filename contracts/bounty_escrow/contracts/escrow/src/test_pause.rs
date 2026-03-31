@@ -349,4 +349,3 @@ fn test_emergency_withdraw_succeeds() {
     assert_eq!(token_client.balance(&escrow_client.address), 0);
     assert_eq!(token_client.balance(&target), 500);
 }
-

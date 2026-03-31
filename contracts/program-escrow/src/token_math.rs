@@ -87,5 +87,6 @@ pub fn safe_sub(a: i128, b: i128) -> i128 {
 ///
 /// Panics with an explicit error message on overflow.
 pub fn safe_mul(a: i128, b: i128) -> i128 {
-    a.checked_mul(b).expect("Token math overflow: multiplication")
+    a.checked_mul(b)
+        .expect("Token math overflow: multiplication")
 }

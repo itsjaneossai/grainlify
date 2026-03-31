@@ -3,7 +3,7 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Events, Ledger, LedgerInfo},
+    testutils::{Address as _, Events, Ledger, LedgerInfo, MockAuth, MockAuthInvoke},
     token::{Client as TokenClient, StellarAssetClient},
     Address, Env, IntoVal, Symbol, TryIntoVal,
 };
@@ -24,6 +24,117 @@ fn create_token_contract<'a>(
 fn create_escrow_contract<'a>(e: &Env) -> BountyEscrowContractClient<'a> {
     let contract_id = e.register_contract(None, BountyEscrowContract);
     BountyEscrowContractClient::new(e, &contract_id)
+}
+
+// ─── Shared helpers & constants ────────────────────────────────────────────
+
+/// A timestamp well in the past — used as "current" time for locked escrows.
+const BASE_TS: u64 = 1_000_000;
+/// A deadline sufficiently far in the future relative to BASE_TS.
+const FUTURE_DL: u64 = BASE_TS + 86_400;
+/// Default token amount used across lifecycle tests.
+const DEFAULT_AMOUNT: i128 = 10_000;
+
+/// Test context carrying all live handles for a single test scenario.
+struct Ctx {
+    env: Env,
+    client: BountyEscrowContractClient<'static>,
+    token_id: Address,
+    admin: Address,
+    depositor: Address,
+    contributor: Address,
+}
+
+/// Construct a fresh Env + contract + token without calling `init`.
+fn setup() -> Ctx {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set(LedgerInfo {
+        timestamp: BASE_TS,
+        ..Default::default()
+    });
+
+    let admin = Address::generate(&env);
+    let depositor = Address::generate(&env);
+    let contributor = Address::generate(&env);
+
+    let token_ref = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_id = token_ref.address();
+    let sac: token::StellarAssetClient<'static> =
+        unsafe { core::mem::transmute(token::StellarAssetClient::new(&env, &token_id)) };
+    sac.mint(&depositor, &1_000_000);
+
+    let cid = env.register_contract(None, BountyEscrowContract);
+    let client: BountyEscrowContractClient<'static> =
+        unsafe { core::mem::transmute(BountyEscrowContractClient::new(&env, &cid)) };
+
+    Ctx {
+        env,
+        client,
+        token_id,
+        admin,
+        depositor,
+        contributor,
+    }
+}
+
+fn setup_init() -> Ctx {
+    let ctx = setup();
+    ctx.client.init(&ctx.admin, &ctx.token_id);
+    ctx
+}
+
+fn lock(ctx: &Ctx, bounty_id: u64, amount: i128) {
+    ctx.client
+        .lock_funds(&ctx.depositor, &bounty_id, &amount, &FUTURE_DL);
+}
+
+/// Returns true if any event in `events` has the given topic symbol.
+fn has_topic(
+    _env: &Env,
+    events: &soroban_sdk::Vec<(
+        soroban_sdk::Address,
+        soroban_sdk::Vec<soroban_sdk::Val>,
+        soroban_sdk::Val,
+    )>,
+    topic: Symbol,
+) -> bool {
+    for (_contract, topics, _data) in events.iter() {
+        for t in topics.iter() {
+            if let Ok(s) =
+                <Symbol as soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>::try_from_val(_env, &t)
+            {
+                if s == topic {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Find the data payload of the first event that has the given topic symbol.
+fn find_data(
+    _env: &Env,
+    events: &soroban_sdk::Vec<(
+        soroban_sdk::Address,
+        soroban_sdk::Vec<soroban_sdk::Val>,
+        soroban_sdk::Val,
+    )>,
+    topic: Symbol,
+) -> Option<soroban_sdk::Val> {
+    for (_contract, topics, data) in events.iter() {
+        for t in topics.iter() {
+            if let Ok(s) =
+                <Symbol as soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>::try_from_val(_env, &t)
+            {
+                if s == topic {
+                    return Some(data);
+                }
+            }
+        }
+    }
+    None
 }
 
 #[test]
@@ -114,9 +225,9 @@ fn test_full_bounty_lifecycle_with_refund() {
     // Verify the error is Unauthorized (error code 7)
     match non_admin_result {
         Err(_e) => {
-            // Convert the error to a string or check error code
-            // println!("Expected error occurred: {:?}", e);
+            // Expected: non-admin cannot release
         }
+        Ok(_) => panic!("expected release to fail for non-admin"),
     }
 
     // 7. Continue with the refund flow (Administrative action: Approve a partial refund)
@@ -314,46 +425,18 @@ fn test_double_release_rejected() {
 
 #[test]
 fn test_refund_after_deadline_no_approval_needed() {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set(LedgerInfo {
-        timestamp: BASE_TS,
+    let ctx = setup_init();
+    lock(&ctx, 1, DEFAULT_AMOUNT);
+    // Move time past the deadline
+    ctx.env.ledger().set(LedgerInfo {
+        timestamp: FUTURE_DL + 1,
         ..Default::default()
     });
-
-    let admin = Address::generate(&env);
-    let depositor = Address::generate(&env);
-    let contributor = Address::generate(&env);
-
-    let token_ref = env.register_stellar_asset_contract_v2(Address::generate(&env));
-    let token_id = token_ref.address();
-    let sac: StellarAssetClient<'static> =
-        unsafe { core::mem::transmute(StellarAssetClient::new(&env, &token_id)) };
-    sac.mint(&depositor, &1_000_000);
-
-    let cid = env.register_contract(None, BountyEscrowContract);
-    let client: BountyEscrowContractClient<'static> =
-        unsafe { core::mem::transmute(BountyEscrowContractClient::new(&env, &cid)) };
-
-    Ctx {
-        env,
-        client,
-        token_id,
-        admin,
-        depositor,
-        contributor,
-    }
-}
-
-fn setup_init() -> Ctx {
-    let ctx = setup();
-    ctx.client.init(&ctx.admin, &ctx.token_id);
-    ctx
-}
-
-fn lock(ctx: &Ctx, bounty_id: u64, amount: i128) {
-    ctx.client
-        .lock_funds(&ctx.depositor, &bounty_id, &amount, &FUTURE_DL);
+    // Should succeed without any admin approval
+    ctx.client.refund(&1u64);
+    let info = ctx.client.get_escrow_info(&1u64);
+    assert_eq!(info.status, EscrowStatus::Refunded);
+    assert_eq!(info.remaining_amount, 0);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

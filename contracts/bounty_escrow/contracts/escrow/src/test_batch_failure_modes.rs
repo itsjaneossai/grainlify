@@ -9,10 +9,22 @@
 // written, no token transfer is made, and every "sibling" row in the
 // same batch is left completely unaffected.
 //
-// This file exercises that guarantee from a second, independent angle:
-// it uses a functional-style setup helper instead of the `TestCtx` struct
-// found in `test_batch_failure_mode.rs`, providing complementary coverage
-// with a different test harness.
+// ## Error code contract
+//
+// | Condition                              | Error             |
+// |----------------------------------------|-------------------|
+// | batch size == 0                        | InvalidBatchSize  |
+// | batch size > MAX_BATCH_SIZE            | InvalidBatchSize  |
+// | same bounty_id twice within this batch | DuplicateBountyId |
+// | bounty_id already in persistent store  | BountyExists      |
+// | amount ≤ 0                             | InvalidAmount     |
+// | bounty_id missing (release)            | BountyNotFound    |
+// | escrow not Locked (release)            | FundsNotLocked    |
+// | contract not initialised               | NotInitialized    |
+//
+// This file uses a functional-style setup helper instead of the `TestCtx`
+// struct found in `test_batch_failure_mode.rs`, providing complementary
+// coverage with a different test harness.
 //
 // ## Coverage (this file)
 //
@@ -84,22 +96,8 @@ fn setup() -> Ctx<'static> {
 
     let admin = Address::generate(&env);
     let token_admin = Address::generate(&env);
-    let token_id = env.register_stellar_asset_contract(token_admin.clone());
-    /// Convenience: build a single `LockFundsItem`.
-    fn lock_item(
-        env: &Env,
-        bounty_id: u64,
-        depositor: Address,
-        amount: i128,
-        deadline: u64,
-    ) -> LockFundsItem {
-        LockFundsItem {
-            bounty_id,
-            depositor,
-            amount,
-            deadline,
-        }
-    }
+    let token_sac_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_id = token_sac_contract.address();
 
     let contract_id = env.register_contract(None, BountyEscrowContract);
     let client = BountyEscrowContractClient::new(&env, &contract_id);
@@ -235,6 +233,8 @@ fn batch_lock_duplicate_bounty_id_within_batch_fails() {
             .try_batch_lock_funds(&items)
             .unwrap_err()
             .unwrap(),
+        // Within-batch duplicate is distinct from a pre-existing storage entry;
+        // it returns DuplicateBountyId rather than BountyExists.
         Error::DuplicateBountyId
     );
 }
@@ -283,13 +283,13 @@ fn batch_lock_invalid_second_item_rolls_back_first_sibling() {
             .try_batch_lock_funds(&items)
             .unwrap_err()
             .unwrap(),
+        // Zero amount returns InvalidAmount, not ActionNotFound.
         Error::InvalidAmount
     );
 
-    // Sibling bounty 1 must NOT have been committed
-    assert_eq!(
-        ctx.client.try_get_escrow_info(&1).unwrap_err().unwrap(),
-        Error::BountyNotFound,
+    // Sibling bounty 1 must NOT have been committed.
+    assert!(
+        ctx.client.try_get_escrow(&1).is_err(),
         "sibling bounty 1 must not be stored when a later item fails"
     );
 }
@@ -319,14 +319,12 @@ fn batch_lock_duplicate_last_item_rolls_back_all_previous_siblings() {
         Error::DuplicateBountyId
     );
 
-    assert_eq!(
-        ctx.client.try_get_escrow_info(&10).unwrap_err().unwrap(),
-        Error::BountyNotFound,
+    assert!(
+        ctx.client.try_get_escrow(&10).is_err(),
         "sibling bounty 10 must not be stored"
     );
-    assert_eq!(
-        ctx.client.try_get_escrow_info(&11).unwrap_err().unwrap(),
-        Error::BountyNotFound,
+    assert!(
+        ctx.client.try_get_escrow(&11).is_err(),
         "sibling bounty 11 must not be stored"
     );
 }
@@ -519,6 +517,8 @@ fn batch_release_duplicate_bounty_id_within_batch_fails() {
             .try_batch_release_funds(&items)
             .unwrap_err()
             .unwrap(),
+        // Within-batch duplicate returns DuplicateBountyId (not BountyExists,
+        // which is reserved for a bounty_id already present in storage).
         Error::DuplicateBountyId
     );
 }
@@ -579,7 +579,7 @@ fn batch_release_nonexistent_second_item_rolls_back_first_sibling() {
     );
 
     assert_eq!(
-        ctx.client.get_escrow_info(&1).status,
+        ctx.client.get_escrow(&1).status,
         crate::EscrowStatus::Locked,
         "sibling bounty 1 must remain Locked after its neighbour caused a rollback"
     );
@@ -659,7 +659,7 @@ fn batch_release_mixed_locked_and_refunded_is_atomic() {
     );
 
     assert_eq!(
-        ctx.client.get_escrow_info(&20).status,
+        ctx.client.get_escrow(&20).status,
         crate::EscrowStatus::Locked,
         "locked sibling must not be released when a refunded sibling fails"
     );
@@ -732,7 +732,7 @@ fn batch_release_partial_failure_leaves_all_siblings_locked() {
     );
 
     assert_eq!(
-        ctx.client.get_escrow_info(&32).status,
+        ctx.client.get_escrow(&32).status,
         crate::EscrowStatus::Locked,
         "bounty 32 must remain Locked; its sibling's failure must not release it"
     );

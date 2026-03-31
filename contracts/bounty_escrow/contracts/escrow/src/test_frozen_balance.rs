@@ -26,7 +26,7 @@ impl<'a> TestEnv<'a> {
         let depositor = Address::generate(&env);
         let contributor = Address::generate(&env);
 
-        let token_id = env.register_stellar_asset_contract(admin.clone());
+        let token_id = env.register_stellar_asset_contract_v2(admin.clone());
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
 
         let contract_id = env.register_contract(None, BountyEscrowContract);
@@ -181,7 +181,7 @@ fn test_non_admin_cannot_freeze_escrow() {
     // For a stricter test, create a fresh env without mock_all_auths:
     let env2 = Env::default();
     let admin2 = Address::generate(&env2);
-    let token_id2 = env2.register_stellar_asset_contract(admin2.clone());
+    let token_id2 = env2.register_stellar_asset_contract_v2(admin2.clone());
     let contract_id2 = env2.register_contract(None, BountyEscrowContract);
     let client2 = BountyEscrowContractClient::new(&env2, &contract_id2);
     env2.mock_all_auths();

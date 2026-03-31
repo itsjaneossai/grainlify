@@ -59,7 +59,12 @@ mod test_claim_tickets {
         }
     }
 
-    fn get_beneficiary_tickets(env: &Env, beneficiary: Address, start: u32, limit: u32) -> Vec<u64> {
+    fn get_beneficiary_tickets(
+        env: &Env,
+        beneficiary: Address,
+        start: u32,
+        limit: u32,
+    ) -> Vec<u64> {
         let tickets = env
             .storage()
             .persistent()
@@ -67,7 +72,11 @@ mod test_claim_tickets {
             .unwrap_or_else(|| Vec::new(env));
 
         let total = tickets.len();
-        let end = if start + limit > total { total } else { start + limit };
+        let end = if start + limit > total {
+            total
+        } else {
+            start + limit
+        };
         let mut page = Vec::new(env);
         for i in start..end {
             if let Some(ticket_id) = tickets.get(i) {
@@ -861,8 +870,7 @@ mod test_claim_tickets {
             .unwrap();
 
         // 3. Verify ticket is valid
-        let (is_valid, is_expired, already_used) =
-            verify_claim_ticket(env.clone(), ticket_id);
+        let (is_valid, is_expired, already_used) = verify_claim_ticket(env.clone(), ticket_id);
         assert!(
             is_valid && !is_expired && !already_used,
             "Fresh ticket should be valid"
@@ -881,8 +889,7 @@ mod test_claim_tickets {
         );
 
         // 6. Verify ticket is marked as used
-        let (is_valid, is_expired, already_used) =
-            verify_claim_ticket(env.clone(), ticket_id);
+        let (is_valid, is_expired, already_used) = verify_claim_ticket(env.clone(), ticket_id);
         assert!(!is_valid && already_used, "Used ticket should not be valid");
 
         // 7. Attempt replay - should fail

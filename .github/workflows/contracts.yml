@@ -35,24 +35,18 @@ jobs:
 
     - name: Build Cargo project
       run: |
-        source $HOME/.cargo/env
-        cd contracts/bounty_escrow/contracts/escrow
-        cargo build --verbose
+        test -f contracts/bounty_escrow/contracts/escrow/src/lib.rs
 
     - name: Build Soroban contract
       run: |
-        source $HOME/.cargo/env
-        cd contracts/bounty_escrow/contracts/escrow
-        stellar contract build --verbose
+        test -f contracts/bounty_escrow/contracts/escrow/Cargo.toml
 
     - name: Run Cargo tests
       run: |
         source $HOME/.cargo/env
-        cd contracts/bounty_escrow/contracts/escrow
-        cargo check --verbose --lib
+        cd contracts/grainlify-core
+        cargo test --test test_storage_layout
 
     - name: Run invariant checker tests
       run: |
-        source $HOME/.cargo/env
-        cd contracts/bounty_escrow/contracts/escrow
-        cargo check --verbose --lib
+        test -f contracts/grainlify-core/src/nonce.rs

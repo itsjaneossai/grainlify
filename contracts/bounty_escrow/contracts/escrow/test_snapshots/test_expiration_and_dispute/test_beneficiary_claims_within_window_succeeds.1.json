@@ -538,6 +538,20 @@
                     },
                     {
                       "key": {
+                        "symbol": "archived"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "deadline"
                       },
                       "val": {
@@ -567,7 +581,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 1500
+                          "lo": 0
                         }
                       }
                     },
@@ -878,7 +892,7 @@
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 2
                         }
                       }
                     ]
@@ -2610,6 +2624,20 @@
                 },
                 {
                   "key": {
+                    "symbol": "archived"
+                  },
+                  "val": {
+                    "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "archived_at"
+                  },
+                  "val": "void"
+                },
+                {
+                  "key": {
                     "symbol": "deadline"
                   },
                   "val": {
@@ -2639,7 +2667,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 1500
+                      "lo": 0
                     }
                   }
                 },

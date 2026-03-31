@@ -154,6 +154,8 @@ fn test_admin_can_update_fee_config() {
     s.client.update_fee_config(
         &Some(50i128),
         &Some(50i128),
+        &None,
+        &None,
         &Some(s.admin.clone()),
         &Some(true),
     );
@@ -371,7 +373,7 @@ fn test_operator_cannot_update_fee_config() {
     let contract_id = env.register_contract(None, BountyEscrowContract);
     let client = BountyEscrowContractClient::new(&env, &contract_id);
     // No init — must panic
-    client.update_fee_config(&Some(100i128), &None, &None, &None);
+    client.update_fee_config(&Some(100i128), &None, &None, &None, &None, &None);
 }
 
 #[test]

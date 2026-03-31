@@ -128,10 +128,7 @@ fn test_issue_and_use_release_capability() {
         &setup.delegate,
         &capability_id,
     );
-    assert_eq!(
-        too_large.unwrap_err().unwrap(),
-        Error::CapAmountExceeded
-    );
+    assert_eq!(too_large.unwrap_err().unwrap(), Error::CapAmountExceeded);
 }
 
 #[test]

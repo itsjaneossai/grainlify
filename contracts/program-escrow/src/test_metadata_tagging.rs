@@ -2,10 +2,7 @@
 extern crate std;
 
 use crate::*;
-use soroban_sdk::{
-    testutils::Address as _,
-    token, Address, Env, String, Vec as SdkVec,
-};
+use soroban_sdk::{testutils::Address as _, token, Address, Env, String, Vec as SdkVec};
 
 fn create_token(
     env: &Env,
@@ -121,11 +118,9 @@ fn test_query_programs_by_type() {
     }
 
     // Query hackathon programs
-    let hackathons = s.escrow.query_programs_by_type(
-        &String::from_str(&s.env, "hackathon"),
-        &0,
-        &20,
-    );
+    let hackathons =
+        s.escrow
+            .query_programs_by_type(&String::from_str(&s.env, "hackathon"), &0, &20);
     assert_eq!(hackathons.len(), 2);
 
     // Query grant programs
@@ -167,11 +162,9 @@ fn test_query_programs_by_ecosystem() {
     }
 
     // Query stellar programs
-    let stellar_programs = s.escrow.query_programs_by_ecosystem(
-        &String::from_str(&s.env, "stellar"),
-        &0,
-        &20,
-    );
+    let stellar_programs =
+        s.escrow
+            .query_programs_by_ecosystem(&String::from_str(&s.env, "stellar"), &0, &20);
     assert_eq!(stellar_programs.len(), 2);
 }
 
@@ -213,15 +206,15 @@ fn test_query_programs_by_tags() {
     }
 
     // Query by "defi" tag
-    let defi_programs =
-        s.escrow
-            .query_programs_by_tag(&String::from_str(&s.env, "defi"), &0, &20);
+    let defi_programs = s
+        .escrow
+        .query_programs_by_tag(&String::from_str(&s.env, "defi"), &0, &20);
     assert_eq!(defi_programs.len(), 3); // 2, 4, 6
 
     // Query by "nft" tag
-    let nft_programs =
-        s.escrow
-            .query_programs_by_tag(&String::from_str(&s.env, "nft"), &0, &20);
+    let nft_programs = s
+        .escrow
+        .query_programs_by_tag(&String::from_str(&s.env, "nft"), &0, &20);
     assert_eq!(nft_programs.len(), 2); // 3, 6
 }
 

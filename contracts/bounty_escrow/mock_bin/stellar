@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+if [[ "$1" = "keys" && "$2" = "address" ]]; then
+    echo FAKE_ADDRESS
+    exit 0
+fi
+echo "Mock stellar call"
+exit 0

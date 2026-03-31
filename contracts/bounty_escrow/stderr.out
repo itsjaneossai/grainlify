@@ -1,0 +1,795 @@
+warning: unused imports: `Symbol`, `contract`, and `contractimpl`
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:11:5
+   |
+11 |     contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+   |     ^^^^^^^^                 ^^^^^^^^^^^^
+12 |     String, Symbol, Vec,
+   |             ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `contract` and `contractimpl`
+ --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:3:5
+  |
+3 |     contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Map, Symbol,
+  |     ^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused import: `crate::errors`
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:125:5
+    |
+125 | use crate::errors;
+    |     ^^^^^^^^^^^^^
+
+warning: constant `CONFIG_SNAPSHOT_LIMIT` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:645:7
+    |
+645 | const CONFIG_SNAPSHOT_LIMIT: u32 = 20;
+    |       ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `contract_is_initialized` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:730:4
+    |
+730 | fn contract_is_initialized(env: &Env) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `emit_migration_event` is never used
+    --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:2228:4
+     |
+2228 | fn emit_migration_event(env: &Env, event: MigrationEvent) {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `migrate_v1_to_v2` is never used
+    --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:2268:4
+     |
+2268 | fn migrate_v1_to_v2(_env: &Env) {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `migrate_v2_to_v3` is never used
+    --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:2304:4
+     |
+2304 | fn migrate_v2_to_v3(_env: &Env) {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: enum `MultiSigError` is never used
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/multisig.rs:47:10
+   |
+47 | pub enum MultiSigError {
+   |          ^^^^^^^^^^^^^
+
+warning: struct `MultiSig` is never constructed
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/multisig.rs:62:12
+   |
+62 | pub struct MultiSig;
+   |            ^^^^^^^^
+
+warning: multiple associated functions are never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/multisig.rs:66:12
+    |
+64  | impl MultiSig {
+    | ------------- associated functions in this implementation
+65  |     /// Initializes the signer set and execution threshold.
+66  |     pub fn init(env: &Env, signers: Vec<Address>, threshold: u32) {
+    |            ^^^^
+...
+79  |     pub fn propose(env: &Env, proposer: Address) -> u64 {
+    |            ^^^^^^^
+...
+115 |     pub fn approve(env: &Env, proposal_id: u64, signer: Address) {
+    |            ^^^^^^^
+...
+142 |     pub fn can_execute(env: &Env, proposal_id: u64) -> bool {
+    |            ^^^^^^^^^^^
+...
+154 |     pub fn is_contract_paused(env: &Env) -> bool {
+    |            ^^^^^^^^^^^^^^^^^^
+...
+158 |     pub fn pause(env: &Env, signer: Address) {
+    |            ^^^^^
+...
+166 |     pub fn unpause(env: &Env, signer: Address) {
+    |            ^^^^^^^
+...
+174 |     pub fn is_state_inconsistent(_env: &Env) -> bool {
+    |            ^^^^^^^^^^^^^^^^^^^^^
+...
+179 |     pub fn mark_executed(env: &Env, proposal_id: u64) {
+    |            ^^^^^^^^^^^^^
+...
+201 |     pub fn get_config_opt(env: &Env) -> Option<MultiSigConfig> {
+    |            ^^^^^^^^^^^^^^
+...
+206 |     pub fn set_config(env: &Env, config: MultiSigConfig) {
+    |            ^^^^^^^^^^
+...
+214 |     pub fn clear_config(env: &Env) {
+    |            ^^^^^^^^^^^^
+...
+221 |     fn get_config(env: &Env) -> MultiSigConfig {
+    |        ^^^^^^^^^^
+...
+228 |     fn get_proposal(env: &Env, proposal_id: u64) -> Proposal {
+    |        ^^^^^^^^^^^^
+...
+235 |     fn assert_signer(config: &MultiSigConfig, signer: &Address) {
+    |        ^^^^^^^^^^^^^
+
+warning: constant `PROPOSALS` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:116:11
+    |
+116 | pub const PROPOSALS: Symbol = symbol_short!("PROPOSALS");
+    |           ^^^^^^^^^
+
+warning: constant `PROPOSAL_COUNT` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:118:11
+    |
+118 | pub const PROPOSAL_COUNT: Symbol = symbol_short!("PROP_CNT");
+    |           ^^^^^^^^^^^^^^
+
+warning: constant `VOTES` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:120:11
+    |
+120 | pub const VOTES: Symbol = symbol_short!("VOTES");
+    |           ^^^^^
+
+warning: constant `GOVERNANCE_CONFIG` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:122:11
+    |
+122 | pub const GOVERNANCE_CONFIG: Symbol = symbol_short!("GOV_CFG");
+    |           ^^^^^^^^^^^^^^^^^
+
+warning: function `validate_config` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:163:15
+    |
+163 | pub(crate) fn validate_config(config: &GovernanceConfig) -> Result<(), Error> {
+    |               ^^^^^^^^^^^^^^^
+
+warning: struct `GovernanceContract` is never constructed
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:180:12
+    |
+180 | pub struct GovernanceContract;
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: associated functions `init_governance_state`, `create_proposal`, `cast_vote`, `finalize_proposal`, `execute_proposal`, and `get_config` are never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/governance.rs:184:12
+    |
+182 | impl GovernanceContract {
+    | ----------------------- associated functions in this implementation
+183 |     /// Initializes governance state for the standalone governance contract.
+184 |     pub fn init_governance_state(
+    |            ^^^^^^^^^^^^^^^^^^^^^
+...
+197 |     pub fn create_proposal(
+    |            ^^^^^^^^^^^^^^^
+...
+264 |     pub fn cast_vote(
+    |            ^^^^^^^^^
+...
+343 |     pub fn finalize_proposal(env: Env, proposal_id: u32) -> Result<ProposalStatus, Error> {
+    |            ^^^^^^^^^^^^^^^^^
+...
+426 |     pub fn execute_proposal(env: Env, proposal_id: u32) -> Result<(), Error> {
+    |            ^^^^^^^^^^^^^^^^
+...
+466 |     pub fn get_config(env: Env) -> Result<GovernanceConfig, Error> {
+    |            ^^^^^^^^^^
+
+warning: constant `OPERATION_COUNT` is never used
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:85:11
+   |
+85 |     const OPERATION_COUNT: &str = "op_count";
+   |           ^^^^^^^^^^^^^^^
+
+warning: constant `USER_COUNT` is never used
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:86:11
+   |
+86 |     const USER_COUNT: &str = "usr_count";
+   |           ^^^^^^^^^^
+
+warning: constant `ERROR_COUNT` is never used
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:87:11
+   |
+87 |     const ERROR_COUNT: &str = "err_count";
+   |           ^^^^^^^^^^^
+
+warning: constant `USER_INDEX` is never used
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:88:11
+   |
+88 |     const USER_INDEX: &str = "usr_index";
+   |           ^^^^^^^^^^
+
+warning: constant `LAST_OPERATION_TS` is never used
+  --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:89:11
+   |
+89 |     const LAST_OPERATION_TS: &str = "last_op_ts";
+   |           ^^^^^^^^^^^^^^^^^
+
+warning: constant `MAX_TRACKED_FUNCTIONS` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:194:15
+    |
+194 |     pub const MAX_TRACKED_FUNCTIONS: u32 = 50;
+    |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MAX_TRACKED_USERS` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:197:15
+    |
+197 |     pub const MAX_TRACKED_USERS: u32 = 64;
+    |               ^^^^^^^^^^^^^^^^^
+
+warning: function `get_counter` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:199:8
+    |
+199 |     fn get_counter(env: &Env, key: &str) -> u64 {
+    |        ^^^^^^^^^^^
+
+warning: function `set_counter` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:206:8
+    |
+206 |     fn set_counter(env: &Env, key: &str, value: u64) {
+    |        ^^^^^^^^^^^
+
+warning: function `get_tracked_users` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:212:8
+    |
+212 |     fn get_tracked_users(env: &Env) -> Vec<Address> {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: function `track_unique_user` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:219:8
+    |
+219 |     fn track_unique_user(env: &Env, caller: &Address) {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: function `version_semver_string` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:239:8
+    |
+239 |     fn version_semver_string(env: &Env) -> String {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `track_operation` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:253:12
+    |
+253 |     pub fn track_operation(env: &Env, operation: Symbol, caller: Address, success: bool) {
+    |            ^^^^^^^^^^^^^^^
+
+warning: function `emit_performance` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:284:12
+    |
+284 |     pub fn emit_performance(env: &Env, function: Symbol, duration: u64) {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: function `health_check` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:356:12
+    |
+356 |     pub fn health_check(env: &Env) -> HealthStatus {
+    |            ^^^^^^^^^^^^
+
+warning: function `get_analytics` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:368:12
+    |
+368 |     pub fn get_analytics(env: &Env) -> Analytics {
+    |            ^^^^^^^^^^^^^
+
+warning: function `get_state_snapshot` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:388:12
+    |
+388 |     pub fn get_state_snapshot(env: &Env) -> StateSnapshot {
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: function `get_performance_stats` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:401:12
+    |
+401 |     pub fn get_performance_stats(env: &Env, function_name: Symbol) -> PerformanceStats {
+    |            ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_invariants` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:423:12
+    |
+423 |     pub fn check_invariants(env: &Env) -> InvariantReport {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: function `verify_invariants` is never used
+   --> /Users/mac/Desktop/CODE/grainlify/contracts/grainlify-core/src/lib.rs:498:12
+    |
+498 |     pub fn verify_invariants(env: &Env) -> bool {
+    |            ^^^^^^^^^^^^^^^^^
+
+warning: `grainlify-core` (lib) generated 38 warnings (run `cargo fix --lib -p grainlify-core` to apply 3 suggestions)
+warning: unused imports: `NOTIFY_ON_LOCK` and `NOTIFY_ON_RELEASE`
+ --> contracts/escrow/src/test_metadata.rs:1:63
+  |
+1 | use crate::{BountyEscrowContract, BountyEscrowContractClient, NOTIFY_ON_LOCK, NOTIFY_ON_RELEASE};
+  |                                                               ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `Events`, `IntoVal`, `Symbol`, and `TryIntoVal`
+ --> contracts/escrow/src/test_metadata.rs:3:31
+  |
+3 |     testutils::{Address as _, Events, Ledger},
+  |                               ^^^^^^
+4 |     token, Address, Env, IntoVal, String, Symbol, TryIntoVal,
+  |                          ^^^^^^^          ^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `crate::Error`
+   --> contracts/escrow/src/test_cross_contract_interface.rs:705:13
+    |
+705 |         use crate::Error;
+    |             ^^^^^^^^^^^^
+
+warning: unused import: `super::*`
+  --> contracts/escrow/src/test_deterministic_randomness.rs:17:5
+   |
+17 | use super::*;
+   |     ^^^^^^^^
+
+warning: unused imports: `Address as _`, `Address`, `BytesN`, `Env`, `Ledger`, `Vec as SdkVec`, and `token`
+  --> contracts/escrow/src/test_deterministic_randomness.rs:19:17
+   |
+19 |     testutils::{Address as _, Ledger},
+   |                 ^^^^^^^^^^^^  ^^^^^^
+20 |     token, Address, BytesN, Env, Vec as SdkVec,
+   |     ^^^^^  ^^^^^^^  ^^^^^^  ^^^  ^^^^^^^^^^^^^
+
+warning: unused imports: `DataKey` and `TokenFeeConfig`
+  --> contracts/escrow/src/test_multi_token_fees.rs:15:63
+   |
+15 | use crate::{BountyEscrowContract, BountyEscrowContractClient, DataKey, Error, TokenFeeConfig};
+   |                                                               ^^^^^^^         ^^^^^^^^^^^^^^
+
+warning: unused import: `Ledger`
+  --> contracts/escrow/src/test_multi_token_fees.rs:17:31
+   |
+17 |     testutils::{Address as _, Ledger},
+   |                               ^^^^^^
+
+warning: unexpected `cfg` condition value: `testutils`
+   --> contracts/escrow/src/gas_budget.rs:139:17
+    |
+139 | #[cfg(any(test, feature = "testutils"))]
+    |                 ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: expected values for `feature` are: `default` and `metadata_tagging`
+    = help: consider adding `testutils` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `testutils`
+   --> contracts/escrow/src/gas_budget.rs:149:17
+    |
+149 | #[cfg(any(test, feature = "testutils"))]
+    |                 ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: expected values for `feature` are: `default` and `metadata_tagging`
+    = help: consider adding `testutils` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+   --> contracts/escrow/src/gas_budget.rs:170:17
+    |
+170 | #[cfg(any(test, feature = "testutils"))]
+    |                 ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: expected values for `feature` are: `default` and `metadata_tagging`
+    = help: consider adding `testutils` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unused imports: `BountyEscrowInitialized`, `TicketClaimed`, `emit_bounty_initialized`, `emit_maintenance_mode_changed`, and `emit_ticket_claimed`
+  --> contracts/escrow/src/lib.rs:50:57
+   |
+50 |     emit_batch_funds_locked, emit_batch_funds_released, emit_bounty_initialized,
+   |                                                         ^^^^^^^^^^^^^^^^^^^^^^^
+...
+53 |     emit_maintenance_mode_changed, emit_notification_preferences_updated,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+54 |     emit_participant_filter_mode_changed, emit_risk_flags_updated, emit_ticket_claimed,
+   |                                                                    ^^^^^^^^^^^^^^^^^^^
+55 |     emit_ticket_issued, BatchFundsLocked, BatchFundsReleased, BountyEscrowInitialized,
+   |                                                               ^^^^^^^^^^^^^^^^^^^^^^^
+...
+59 |     RiskFlagsUpdated, TicketClaimed, TicketIssued, EVENT_VERSION_V2,
+   |                       ^^^^^^^^^^^^^
+
+warning: unused import: `grainlify_core::asset`
+   --> contracts/escrow/src/lib.rs:531:5
+    |
+531 | use grainlify_core::asset;
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:2398:25
+     |
+2398 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:2561:25
+     |
+2561 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:2908:25
+     |
+2908 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:3005:25
+     |
+3005 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:3557:25
+     |
+3557 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:3618:25
+     |
+3618 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:3659:25
+     |
+3659 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:3785:25
+     |
+3785 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:4789:25
+     |
+4789 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:4940:25
+     |
+4940 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:5018:25
+     |
+5018 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `testutils`
+    --> contracts/escrow/src/lib.rs:5136:25
+     |
+5136 |         #[cfg(any(test, feature = "testutils"))]
+     |                         ^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected values for `feature` are: `default` and `metadata_tagging`
+     = help: consider adding `testutils` as a feature in `Cargo.toml`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unused import: `Error as ContractError`
+ --> contracts/escrow/src/test_bounty_escrow.rs:1:63
+  |
+1 | use crate::{BountyEscrowContract, BountyEscrowContractClient, Error as ContractError};
+  |                                                               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `IntoVal`, `MockAuthInvoke`, and `MockAuth`
+ --> contracts/escrow/src/test_bounty_escrow.rs:4:39
+  |
+4 |     testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
+  |                                       ^^^^^^^^  ^^^^^^^^^^^^^^
+5 |     token, Address, Env, IntoVal, Map, Symbol, TryFromVal, Val,
+  |                          ^^^^^^^
+
+warning: unused import: `vec`
+ --> contracts/escrow/src/test_deprecation.rs:8:12
+  |
+8 |     token, vec, Address, Env, Vec,
+  |            ^^^
+
+warning: unused import: `StellarAssetClient`
+ --> contracts/escrow/src/test_lifecycle.rs:7:36
+  |
+7 |     token::{Client as TokenClient, StellarAssetClient},
+  |                                    ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `LedgerInfo`
+ --> contracts/escrow/src/test_participant_filter_mode.rs:8:39
+  |
+8 |     testutils::{Address as _, Ledger, LedgerInfo},
+  |                                       ^^^^^^^^^^
+
+warning: unused import: `crate::PauseStateChanged`
+ --> contracts/escrow/src/test_pause.rs:2:5
+  |
+2 | use crate::PauseStateChanged;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Events`, `IntoVal`, `Symbol`, and `TryIntoVal`
+ --> contracts/escrow/src/test_pause.rs:4:31
+  |
+4 |     testutils::{Address as _, Events, Ledger},
+  |                               ^^^^^^
+5 |     token, Address, Env, IntoVal, Symbol, TryIntoVal,
+  |                          ^^^^^^^  ^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `vec`
+  --> contracts/escrow/src/test_batch_failure_mode.rs:62:12
+   |
+62 |     token, vec, Address, Env, Vec,
+   |            ^^^
+
+warning: unused import: `Escrow`
+  --> contracts/escrow/src/test_batch_failure_mode.rs:66:71
+   |
+66 |     BountyEscrowContract, BountyEscrowContractClient, DataKey, Error, Escrow, EscrowStatus,
+   |                                                                       ^^^^^^
+
+warning: use of deprecated method `soroban_sdk::Env::register_stellar_asset_contract`: use [Env::register_stellar_asset_contract_v2]
+  --> contracts/escrow/src/test_multi_token_fees.rs:44:28
+   |
+44 |         let token_id = env.register_stellar_asset_contract(admin.clone());
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: unreachable expression
+   --> contracts/escrow/src/test_lifecycle.rs:895:9
+    |
+892 |               continue;
+    |               -------- any code following this expression is unreachable
+...
+895 | /         if sym == symbol_short!("init") {
+896 | |             let p: events::BountyEscrowInitialized = data.into_val(&ctx.env);
+897 | |             assert_eq!(p.version, EVENT_VERSION_V2, "init: wrong version");
+898 | |         } else if sym == symbol_short!("f_lock") {
+...   |
+906 | |             assert_eq!(p.version, EVENT_VERSION_V2, "f_ref: wrong version");
+907 | |         }
+    | |_________^ unreachable expression
+    |
+    = note: `#[warn(unreachable_code)]` on by default
+
+warning: use of deprecated method `soroban_sdk::Env::register_stellar_asset_contract`: use [Env::register_stellar_asset_contract_v2]
+    --> contracts/escrow/src/lib.rs:6024:32
+     |
+6024 |             let token_id = env.register_stellar_asset_contract(admin.clone());
+     |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated method `soroban_sdk::Env::register_stellar_asset_contract`: use [Env::register_stellar_asset_contract_v2]
+  --> contracts/escrow/src/test_batch_failure_mode.rs:98:28
+   |
+98 |         let token_id = env.register_stellar_asset_contract(admin.clone());
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Events`
+ --> contracts/escrow/src/test_deprecation.rs:7:31
+  |
+7 |     testutils::{Address as _, Events, Ledger as _},
+  |                               ^^^^^^
+
+warning: unused variable: `token_minter`
+  --> contracts/escrow/src/test_multi_region_treasury.rs:61:41
+   |
+61 |         let (token_addr, _token_client, token_minter) = make_token(&env, &token_admin);
+   |                                         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_minter`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `contributor`
+  --> contracts/escrow/src/test_deprecation.rs:35:9
+   |
+35 |     let contributor = Address::generate(env);
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_contributor`
+
+warning: unused variable: `admin`
+  --> contracts/escrow/src/test_deprecation.rs:47:18
+   |
+47 |     let (escrow, admin, _depositor, _token, _token_admin) = default_setup(&env);
+   |                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_admin`
+
+warning: unused variable: `admin`
+   --> contracts/escrow/src/test_invariants.rs:152:18
+    |
+152 |     let (client, admin, depositor) = setup_bounty(&env);
+    |                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_admin`
+
+warning: unused variable: `data`
+   --> contracts/escrow/src/test_lifecycle.rs:885:25
+    |
+885 |         let (_, topics, data) = all.get(i).unwrap();
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_data`
+
+warning: unused variable: `sym`
+   --> contracts/escrow/src/test_lifecycle.rs:890:16
+    |
+890 |         let Ok(sym) = result else { continue };
+    |                ^^^ help: if this is intentional, prefix it with an underscore: `_sym`
+
+warning: unused variable: `i`
+   --> contracts/escrow/src/test_e2e_upgrade_with_pause.rs:674:9
+    |
+674 |     for i in 0..5 {
+    |         ^ help: if this is intentional, prefix it with an underscore: `_i`
+
+warning: associated functions `get_escrow_info_logic`, `get_fee_config_logic`, and `update_fee_config_logic` are never used
+    --> contracts/escrow/src/lib.rs:5731:8
+     |
+1049 | impl BountyEscrowContract {
+     | ------------------------- associated functions in this implementation
+...
+5731 |     fn get_escrow_info_logic(env: Env, bounty_id: u64) -> Result<Escrow, Error> {
+     |        ^^^^^^^^^^^^^^^^^^^^^
+...
+5762 |     fn get_fee_config_logic(env: Env) -> FeeConfig {
+     |        ^^^^^^^^^^^^^^^^^^^^
+...
+5767 |     fn update_fee_config_logic(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: field `token_admin` is never read
+  --> contracts/escrow/src/test_reentrancy_guard.rs:65:5
+   |
+59 | struct ReentrancyTestSetup<'a> {
+   |        ------------------- field in this struct
+...
+65 |     token_admin: token::StellarAssetClient<'a>,
+   |     ^^^^^^^^^^^
+
+warning: field `admin` is never read
+  --> contracts/escrow/src/test_dispute_resolution.rs:29:5
+   |
+27 | struct Setup {
+   |        ----- field in this struct
+28 |     env: Env,
+29 |     admin: Address,
+   |     ^^^^^
+
+warning: function `set_ledger_timestamp` is never used
+  --> contracts/escrow/src/test_front_running_ordering.rs:68:4
+   |
+68 | fn set_ledger_timestamp(env: &Env, timestamp: u64) {
+   |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `admin` and `token_admin` are never read
+  --> contracts/escrow/src/test_partial_payout_rounding.rs:67:5
+   |
+65 | struct Setup<'a> {
+   |        ----- fields in this struct
+66 |     env: Env,
+67 |     admin: Address,
+   |     ^^^^^
+...
+71 |     token_admin: token::StellarAssetClient<'a>,
+   |     ^^^^^^^^^^^
+
+warning: field `admin` is never read
+    --> contracts/escrow/src/lib.rs:6010:9
+     |
+6005 |     struct TestEnv {
+     |            ------- field in this struct
+...
+6010 |         admin: Address,
+     |         ^^^^^
+
+warning: field `admin` is never read
+  --> contracts/escrow/src/test_batch_failure_mode.rs:83:5
+   |
+78 | struct TestCtx<'a> {
+   |        ------- field in this struct
+...
+83 |     admin: Address,
+   |     ^^^^^
+
+warning: field `token_admin` is never read
+  --> contracts/escrow/src/test_dry_run_simulation.rs:42:5
+   |
+36 | struct SimSetup<'a> {
+   |        -------- field in this struct
+...
+42 |     token_admin: token::StellarAssetClient<'a>,
+   |     ^^^^^^^^^^^
+
+warning: field `admin` is never read
+  --> contracts/escrow/src/test_e2e_upgrade_with_pause.rs:56:5
+   |
+54 | struct TestSetup<'a> {
+   |        --------- field in this struct
+55 |     env: Env,
+56 |     admin: Address,
+   |     ^^^^^
+
+warning: `bounty-escrow` (lib test) generated 54 warnings (run `cargo fix --lib -p bounty-escrow --tests` to apply 18 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (target/debug/deps/bounty_escrow-532f062fbcd0c4ed)
+const EXPECTED: &[(&str, &str)] = &[
+  ("EscrowMetadata", "0000001100000001000000060000000f0000000b626f756e74795f74797065000000000e0000000662756766697800000000000f0000000869737375655f69640000000500000000000002310000000f000000126e6f74696669636174696f6e5f7072656673000000000003000000000000000f0000000e7265666572656e63655f686173680000000000010000000f000000077265706f5f6964000000000500000000000003e90000000f0000000a7269736b5f666c61677300000000000300000000"),
+  ("EscrowStatus::Locked", "0000001000000001000000010000000f000000064c6f636b65640000"),
+  ("Escrow", "0000001100000001000000080000000f00000006616d6f756e7400000000000a0000000000000000000000000012d6870000000f00000008617263686976656400000000000000000000000f0000000b61726368697665645f617400000000010000000f00000008646561646c696e6500000005000000006553f1000000000f000000096465706f7369746f72000000000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f0000000e726566756e645f686973746f727900000000001000000001000000000000000f0000001072656d61696e696e675f616d6f756e740000000a0000000000000000000000000012d6660000000f0000000673746174757300000000001000000001000000010000000f000000064c6f636b65640000"),
+  ("EscrowWithId", "0000001100000001000000020000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000006657363726f7700000000001100000001000000080000000f00000006616d6f756e7400000000000a0000000000000000000000000012d6870000000f00000008617263686976656400000000000000000000000f0000000b61726368697665645f617400000000010000000f00000008646561646c696e6500000005000000006553f1000000000f000000096465706f7369746f72000000000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f0000000e726566756e645f686973746f727900000000001000000001000000000000000f0000001072656d61696e696e675f616d6f756e740000000a0000000000000000000000000012d6660000000f0000000673746174757300000000001000000001000000010000000f000000064c6f636b65640000"),
+  ("PauseFlags", "0000001100000001000000050000000f0000000b6c6f636b5f7061757365640000000000000000010000000f0000000c70617573655f726561736f6e0000000e0000000b6d61696e74656e616e6365000000000f000000097061757365645f61740000000000000500000000000003e70000000f0000000d726566756e645f70617573656400000000000000000000010000000f0000000e72656c656173655f70617573656400000000000000000000"),
+  ("AggregateStats", "0000001100000001000000060000000f0000000c636f756e745f6c6f636b656400000003000000010000000f0000000e636f756e745f726566756e646564000000000003000000030000000f0000000e636f756e745f72656c6561736564000000000003000000020000000f0000000c746f74616c5f6c6f636b65640000000a0000000000000000000000000000000a0000000f0000000e746f74616c5f726566756e64656400000000000a0000000000000000000000000000001e0000000f0000000e746f74616c5f72656c656173656400000000000a00000000000000000000000000000014"),
+  ("PauseStateChanged", "0000001100000001000000050000000f0000000561646d696e000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f000000096f7065726174696f6e0000000000000f000000046c6f636b0000000f00000006706175736564000000000000000000010000000f00000006726561736f6e00000000000e0000000b6d61696e74656e616e6365000000000f0000000974696d657374616d7000000000000005000000000000007b"),
+  ("AntiAbuseConfigView", "0000001100000001000000030000000f0000000f636f6f6c646f776e5f706572696f64000000000500000000000000050000000f0000000e6d61785f6f7065726174696f6e730000000000030000000a0000000f0000000b77696e646f775f73697a650000000005000000000000003c"),
+  ("FeeConfig", "0000001100000001000000080000000f00000014646973747269627574696f6e5f656e61626c656400000000000000000000000f0000000b6665655f656e61626c65640000000000000000010000000f0000000d6665655f726563697069656e74000000000000120000000105050505050505050505050505050505050505050505050505050505050505050000000f0000000d6c6f636b5f6665655f726174650000000000000a000000000000000000000000000000640000000f0000000e6c6f636b5f66697865645f66656500000000000a000000000000000000000000000000000000000f0000001072656c656173655f6665655f726174650000000a000000000000000000000000000000c80000000f0000001172656c656173655f66697865645f6665650000000000000a000000000000000000000000000000000000000f0000001574726561737572795f64657374696e6174696f6e73000000000000100000000100000000"),
+  ("MultisigConfig", "0000001100000001000000030000000f0000001372657175697265645f7369676e6174757265730000000003000000020000000f000000077369676e6572730000000010000000010000000200000012000000010101010101010101010101010101010101010101010101010101010101010101000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f000000107468726573686f6c645f616d6f756e740000000a000000000000000000000000000001f4"),
+  ("ReleaseApproval", "0000001100000001000000030000000f00000009617070726f76616c73000000000000100000000100000001000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000b636f6e7472696275746f720000000012000000010404040404040404040404040404040404040404040404040404040404040404"),
+  ("ClaimRecord", "0000001100000001000000060000000f00000006616d6f756e7400000000000a000000000000000000000000000004d20000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000007636c61696d65640000000000000000000000000f0000000a657870697265735f6174000000000005000000000000022b0000000f00000006726561736f6e000000000003000000050000000f00000009726563697069656e7400000000000012000000010606060606060606060606060606060606060606060606060606060606060606"),
+  ("CapabilityAction::Claim", "0000001000000001000000010000000f00000005436c61696d000000"),
+  ("Capability", "0000001100000001000000090000000f00000006616374696f6e00000000001000000001000000010000000f0000000752656c65617365000000000f0000000c616d6f756e745f6c696d69740000000a000000000000000000000000000003e70000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000665787069727900000000000500000000000003090000000f00000006686f6c6465720000000000120000000107070707070707070707070707070707070707070707070707070707070707070000000f000000056f776e6572000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f0000001072656d61696e696e675f616d6f756e740000000a000000000000000000000000000003780000000f0000000e72656d61696e696e675f75736573000000000003000000030000000f000000077265766f6b6564000000000000000000"),
+  ("RefundMode::Full", "0000001000000001000000010000000f0000000446756c6c"),
+  ("RefundApproval", "0000001100000001000000060000000f00000006616d6f756e7400000000000a000000000000000000000000000001bc0000000f0000000b617070726f7665645f61740000000005000000000000270f0000000f0000000b617070726f7665645f627900000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f00000009626f756e74795f696400000000000005000000000000002a0000000f000000046d6f64650000001000000001000000010000000f000000075061727469616c000000000f00000009726563697069656e7400000000000012000000010303030303030303030303030303030303030303030303030303030303030303"),
+  ("RefundRecord", "0000001100000001000000040000000f00000006616d6f756e7400000000000a0000000000000000000000000000000b0000000f000000046d6f64650000001000000001000000010000000f0000000446756c6c0000000f00000009726563697069656e74000000000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f0000000974696d657374616d7000000000000005000000000000006f"),
+  ("LockFundsItem", "0000001100000001000000040000000f00000006616d6f756e7400000000000a0000000000000000000000000000007b0000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000008646561646c696e650000000500000000000001c80000000f000000096465706f7369746f7200000000000012000000010303030303030303030303030303030303030303030303030303030303030303"),
+  ("ReleaseFundsItem", "0000001100000001000000020000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000b636f6e7472696275746f720000000012000000010404040404040404040404040404040404040404040404040404040404040404"),
+  ("BountyEscrowInitialized", "0000001100000001000000040000000f0000000561646d696e000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f0000000974696d657374616d700000000000000500000000000000010000000f00000005746f6b656e000000000000120000000102020202020202020202020202020202020202020202020202020202020202020000000f0000000776657273696f6e000000000300000002"),
+  ("FundsLocked", "0000001100000001000000050000000f00000006616d6f756e7400000000000a0000000000000000000000000012d6870000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000008646561646c696e6500000005000000006553f1000000000f000000096465706f7369746f72000000000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f0000000776657273696f6e000000000300000002"),
+  ("FundsReleased", "0000001100000001000000050000000f00000006616d6f756e7400000000000a0000000000000000000000000000007b0000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000009726563697069656e74000000000000120000000104040404040404040404040404040404040404040404040404040404040404040000000f0000000974696d657374616d700000000000000500000000000001c80000000f0000000776657273696f6e000000000300000002"),
+  ("FundsRefunded", "0000001100000001000000060000000f00000006616d6f756e7400000000000a000000000000000000000000000000640000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000009726566756e645f746f000000000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f0000000974696d657374616d700000000000000500000000000000c80000000f0000000c747269676765725f747970650000001000000001000000010000000f0000000f446561646c696e6545787069726564000000000f0000000776657273696f6e000000000300000002"),
+  ("FeeOperationType::Lock", "0000001000000001000000010000000f000000044c6f636b"),
+  ("FeeCollected", "0000001100000001000000060000000f00000006616d6f756e7400000000000a000000000000000000000000000001c80000000f000000096665655f66697865640000000000000a000000000000000000000000000000000000000f000000086665655f726174650000000a0000000000000000000000000000007b0000000f0000000e6f7065726174696f6e5f7479706500000000001000000001000000010000000f0000000752656c65617365000000000f00000009726563697069656e74000000000000120000000105050505050505050505050505050505050505050505050505050505050505050000000f0000000974696d657374616d700000000000000500000000000003e7"),
+  ("BatchFundsLocked", "0000001100000001000000030000000f00000005636f756e7400000000000003000000020000000f0000000974696d657374616d700000000000000500000000000000010000000f0000000c746f74616c5f616d6f756e740000000a000000000000000000000000000003e7"),
+  ("FeeConfigUpdated", "0000001100000001000000070000000f0000000b6665655f656e61626c65640000000000000000010000000f0000000d6665655f726563697069656e74000000000000120000000105050505050505050505050505050505050505050505050505050505050505050000000f0000000d6c6f636b5f6665655f726174650000000000000a0000000000000000000000000000000a0000000f0000000e6c6f636b5f66697865645f66656500000000000a000000000000000000000000000000000000000f0000001072656c656173655f6665655f726174650000000a000000000000000000000000000000140000000f0000001172656c656173655f66697865645f6665650000000000000a000000000000000000000000000000000000000f0000000974696d657374616d70000000000000050000000000000002"),
+  ("BatchFundsReleased", "0000001100000001000000030000000f00000005636f756e7400000000000003000000010000000f0000000974696d657374616d700000000000000500000000000000030000000f0000000c746f74616c5f616d6f756e740000000a0000000000000000000000000000014d"),
+  ("ApprovalAdded", "0000001100000001000000040000000f00000008617070726f766572000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000b636f6e7472696275746f7200000000120000000104040404040404040404040404040404040404040404040404040404040404040000000f0000000974696d657374616d70000000000000050000000000000004"),
+  ("ClaimCreated", "0000001100000001000000040000000f00000006616d6f756e7400000000000a000000000000000000000000000000640000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000a657870697265735f617400000000000500000000000000c80000000f00000009726563697069656e7400000000000012000000010606060606060606060606060606060606060606060606060606060606060606"),
+  ("ClaimExecuted", "0000001100000001000000040000000f00000006616d6f756e7400000000000a000000000000000000000000000000640000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000a636c61696d65645f6174000000000005000000000000012c0000000f00000009726563697069656e7400000000000012000000010606060606060606060606060606060606060606060606060606060606060606"),
+  ("ClaimCancelled", "0000001100000001000000050000000f00000006616d6f756e7400000000000a000000000000000000000000000000640000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000c63616e63656c6c65645f61740000000500000000000001900000000f0000000c63616e63656c6c65645f6279000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f00000009726563697069656e7400000000000012000000010606060606060606060606060606060606060606060606060606060606060606"),
+  ("EmergencyWithdrawEvent", "0000001100000001000000040000000f0000000561646d696e000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f00000006616d6f756e7400000000000a000000000000000000000000000003e80000000f00000009726563697069656e74000000000000120000000103030303030303030303030303030303030303030303030303030303030303030000000f0000000974696d657374616d700000000000000500000000000001f4"),
+  ("CapabilityIssued", "0000001100000001000000090000000f00000006616374696f6e00000000001000000001000000010000000f00000006526566756e6400000000000f0000000c616d6f756e745f6c696d69740000000a0000000000000000000000000000007b0000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000d6361706162696c6974795f69640000000000000d0000002007070707070707070707070707070707070707070707070707070707070707070000000f0000000a657870697265735f617400000000000500000000000001c80000000f00000006686f6c6465720000000000120000000107070707070707070707070707070707070707070707070707070707070707070000000f000000086d61785f7573657300000003000000020000000f000000056f776e6572000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f0000000974696d657374616d70000000000000050000000000000315"),
+  ("CapabilityUsed", "0000001100000001000000080000000f00000006616374696f6e00000000001000000001000000010000000f00000006526566756e6400000000000f0000000b616d6f756e745f75736564000000000a0000000000000000000000000000000b0000000f00000009626f756e74795f696400000000000005000000000000002a0000000f0000000d6361706162696c6974795f69640000000000000d0000002007070707070707070707070707070707070707070707070707070707070707070000000f00000006686f6c6465720000000000120000000107070707070707070707070707070707070707070707070707070707070707070000000f0000001072656d61696e696e675f616d6f756e740000000a000000000000000000000000000000160000000f0000000e72656d61696e696e675f75736573000000000003000000010000000f00000007757365645f6174000000000500000000000003e7"),
+  ("CapabilityRevoked", "0000001100000001000000030000000f0000000d6361706162696c6974795f69640000000000000d0000002007070707070707070707070707070707070707070707070707070707070707070000000f000000056f776e6572000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f0000000a7265766f6b65645f6174000000000005000000000000006f"),
+  ("NotificationPreferencesUpdated", "0000001100000001000000070000000f000000056163746f72000000000000120000000101010101010101010101010101010101010101010101010101010101010101010000000f00000009626f756e74795f696400000000000005000000000000002a0000000f00000007637265617465640000000000000000010000000f000000096e65775f707265667300000000000003000000030000000f0000000e70726576696f75735f7072656673000000000003000000000000000f0000000974696d657374616d7000000000000005000000000000022b0000000f0000000776657273696f6e000000000300000002"),
+];

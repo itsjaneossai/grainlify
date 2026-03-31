@@ -97,8 +97,8 @@ mod gas_profile {
     };
 
     use crate::{
-        BountyEscrowContract, BountyEscrowContractClient, EscrowStatus, LockFundsItem,
-        RefundMode, ReleaseFundsItem,
+        BountyEscrowContract, BountyEscrowContractClient, EscrowStatus, LockFundsItem, RefundMode,
+        ReleaseFundsItem,
     };
 
     // =========================================================================
@@ -116,7 +116,10 @@ mod gas_profile {
         let mem_before = env.budget().memory_bytes_count();
         f();
         BudgetDelta {
-            cpu: env.budget().cpu_instruction_count().saturating_sub(cpu_before),
+            cpu: env
+                .budget()
+                .cpu_instruction_count()
+                .saturating_sub(cpu_before),
             mem: env.budget().memory_bytes_count().saturating_sub(mem_before),
         }
     }
@@ -127,12 +130,7 @@ mod gas_profile {
             "| {:<50} | {:>16} | {:>12} |",
             "Scenario", "CPU Instructions", "Mem Bytes"
         );
-        println!(
-            "|{}|{}|{}|",
-            "-".repeat(52),
-            "-".repeat(18),
-            "-".repeat(14)
-        );
+        println!("|{}|{}|{}|", "-".repeat(52), "-".repeat(18), "-".repeat(14));
     }
 
     fn print_row(label: &str, cpu: u64, mem: u64) {
@@ -178,7 +176,7 @@ mod gas_profile {
             let depositor = Address::generate(&env);
             let contributor = Address::generate(&env);
 
-            let token_id = env.register_stellar_asset_contract(admin.clone());
+            let token_id = env.register_stellar_asset_contract_v2(admin.clone());
             let token_sac = token::StellarAssetClient::new(&env, &token_id);
 
             let contract_id = env.register_contract(None, BountyEscrowContract);
@@ -257,7 +255,7 @@ mod gas_profile {
         env.budget().reset_unlimited();
 
         let admin = Address::generate(&env);
-        let token_id = env.register_stellar_asset_contract(admin.clone());
+        let token_id = env.register_stellar_asset_contract_v2(admin.clone());
         let cid = env.register_contract(None, BountyEscrowContract);
         let cli = BountyEscrowContractClient::new(&env, &cid);
 
@@ -445,7 +443,11 @@ mod gas_profile {
         s.env.budget().reset_unlimited();
         print_header();
         let d = s.refund(1);
-        print_row("refund (admin-approved full, before deadline)", d.cpu, d.mem);
+        print_row(
+            "refund (admin-approved full, before deadline)",
+            d.cpu,
+            d.mem,
+        );
         assert!(d.cpu > 0);
     }
 
@@ -1026,19 +1028,11 @@ mod gas_profile {
             "| {:<44} | {:>16} | {:>12} |",
             "Operation", "CPU Instructions", "Mem Bytes"
         );
-        println!(
-            "|{}|{}|{}|",
-            "-".repeat(46),
-            "-".repeat(18),
-            "-".repeat(14)
-        );
+        println!("|{}|{}|{}|", "-".repeat(46), "-".repeat(18), "-".repeat(14));
 
         macro_rules! row {
             ($label:expr, $cpu:expr, $mem:expr) => {
-                println!(
-                    "| {:<44} | {:>16} | {:>12} |",
-                    $label, $cpu, $mem
-                );
+                println!("| {:<44} | {:>16} | {:>12} |", $label, $cpu, $mem);
             };
         }
 
@@ -1048,10 +1042,12 @@ mod gas_profile {
             env.mock_all_auths();
             env.budget().reset_unlimited();
             let admin = Address::generate(&env);
-            let token_id = env.register_stellar_asset_contract(admin.clone());
+            let token_id = env.register_stellar_asset_contract_v2(admin.clone());
             let cid = env.register_contract(None, BountyEscrowContract);
             let cli = BountyEscrowContractClient::new(&env, &cid);
-            let d = measure(&env, || { cli.init(&admin, &token_id); });
+            let d = measure(&env, || {
+                cli.init(&admin, &token_id);
+            });
             row!("init", d.cpu, d.mem);
         }
 
@@ -1147,9 +1143,13 @@ mod gas_profile {
         {
             let s = Setup::new();
             s.mint(&s.depositor.clone(), 10_000);
-            for i in 1..=10u64 { s.lock(i, 1_000); }
+            for i in 1..=10u64 {
+                s.lock(i, 1_000);
+            }
             s.env.budget().reset_unlimited();
-            let d = measure(&s.env, || { s.client.get_aggregate_stats(); });
+            let d = measure(&s.env, || {
+                s.client.get_aggregate_stats();
+            });
             row!("get_aggregate_stats (10 escrows)", d.cpu, d.mem);
         }
 

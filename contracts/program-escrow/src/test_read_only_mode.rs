@@ -130,7 +130,7 @@ fn test_view_calls_succeed_in_read_only_mode() {
     let (contract, _admin, _payout_key, _token) = setup_program_with_admin(&env);
 
     contract.set_read_only_mode(&true, &None);
-    
+
     // View calls should succeed
     let _flag = contract.is_read_only();
     let _pause = contract.get_pause_flags();

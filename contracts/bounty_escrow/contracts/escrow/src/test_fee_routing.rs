@@ -1,7 +1,7 @@
 #![cfg(test)]
 mod test_fee_routing {
-    use crate::{BountyEscrowContract, BountyEscrowContractClient, TreasuryDestination, Error};
-    use soroban_sdk::{testutils::Address as _, token, Address, Env, String, vec};
+    use crate::{BountyEscrowContract, BountyEscrowContractClient, Error, TreasuryDestination};
+    use soroban_sdk::{testutils::Address as _, token, vec, Address, Env, String};
 
     fn make_token<'a>(
         env: &'a Env,
@@ -44,14 +44,29 @@ mod test_fee_routing {
         let partner = Address::generate(&env);
 
         token_admin.mint(&depositor, &1_000);
-        
+
         // 7 args: lock_rate (10%), release_rate, lock_fixed, release_fixed, recipient, enabled
-        client.update_fee_config(&Some(1000), &Some(0), &Some(0), &Some(0), &Some(treasury.clone()), &Some(true));
-        
+        client.update_fee_config(
+            &Some(1000),
+            &Some(0),
+            &Some(0),
+            &Some(0),
+            &Some(treasury.clone()),
+            &Some(true),
+        );
+
         let destinations = vec![
             &env,
-            TreasuryDestination { address: treasury.clone(), weight: 70, region: String::from_str(&env, "Main") },
-            TreasuryDestination { address: partner.clone(), weight: 30, region: String::from_str(&env, "Partner") },
+            TreasuryDestination {
+                address: treasury.clone(),
+                weight: 70,
+                region: String::from_str(&env, "Main"),
+            },
+            TreasuryDestination {
+                address: partner.clone(),
+                weight: 30,
+                region: String::from_str(&env, "Partner"),
+            },
         ];
         client.set_treasury_distributions(&destinations, &true);
 
@@ -77,12 +92,27 @@ mod test_fee_routing {
         let partner = Address::generate(&env);
 
         token_admin.mint(&depositor, &1_000);
-        client.update_fee_config(&Some(0), &Some(333), &Some(0), &Some(0), &Some(treasury.clone()), &Some(true));
-        
+        client.update_fee_config(
+            &Some(0),
+            &Some(333),
+            &Some(0),
+            &Some(0),
+            &Some(treasury.clone()),
+            &Some(true),
+        );
+
         let destinations = vec![
             &env,
-            TreasuryDestination { address: treasury.clone(), weight: 50, region: String::from_str(&env, "Main") },
-            TreasuryDestination { address: partner.clone(), weight: 50, region: String::from_str(&env, "Partner") },
+            TreasuryDestination {
+                address: treasury.clone(),
+                weight: 50,
+                region: String::from_str(&env, "Main"),
+            },
+            TreasuryDestination {
+                address: partner.clone(),
+                weight: 50,
+                region: String::from_str(&env, "Partner"),
+            },
         ];
         client.set_treasury_distributions(&destinations, &true);
 
@@ -109,11 +139,22 @@ mod test_fee_routing {
         let partner = Address::generate(&env);
 
         token_admin.mint(&depositor, &1_000);
-        client.update_fee_config(&Some(0), &Some(500), &Some(0), &Some(0), &Some(treasury.clone()), &Some(true));
+        client.update_fee_config(
+            &Some(0),
+            &Some(500),
+            &Some(0),
+            &Some(0),
+            &Some(treasury.clone()),
+            &Some(true),
+        );
 
         let destinations = vec![
             &env,
-            TreasuryDestination { address: partner.clone(), weight: 100, region: String::from_str(&env, "Partner") },
+            TreasuryDestination {
+                address: partner.clone(),
+                weight: 100,
+                region: String::from_str(&env, "Partner"),
+            },
         ];
         // We set destinations but explicitly DISABLE distribution
         client.set_treasury_distributions(&destinations, &false);
@@ -139,11 +180,23 @@ mod test_fee_routing {
         let treasury = Address::generate(&env);
 
         token_admin.mint(&depositor, &10_000);
-        client.update_fee_config(&Some(0), &Some(1000), &Some(0), &Some(0), &Some(treasury.clone()), &Some(true));
+        client.update_fee_config(
+            &Some(0),
+            &Some(1000),
+            &Some(0),
+            &Some(0),
+            &Some(treasury.clone()),
+            &Some(true),
+        );
         client.set_treasury_distributions(&vec![&env], &false);
 
         let bounty_id = 4u64;
-        client.lock_funds(&depositor, &bounty_id, &10_000, &(env.ledger().timestamp() + 3600));
+        client.lock_funds(
+            &depositor,
+            &bounty_id,
+            &10_000,
+            &(env.ledger().timestamp() + 3600),
+        );
 
         // First release
         client.release_funds(&bounty_id, &contributor);

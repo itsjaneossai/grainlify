@@ -1,4 +1,4 @@
-﻿#![cfg(test)]
+#![cfg(test)]
 #![allow(unused)]
 
 //! # ABI Compatibility Suite
@@ -31,7 +31,9 @@ use soroban_sdk::{
 fn setup(env: &Env) -> (Address, Address, token::Client, BountyEscrowContractClient) {
     let admin = Address::generate(env);
     let depositor = Address::generate(env);
-    let token_addr = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token_addr = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let token = token::Client::new(env, &token_addr);
     let token_admin = token::StellarAssetClient::new(env, &token_addr);
     let contract_id = env.register_contract(None, BountyEscrowContract);
@@ -172,7 +174,9 @@ fn test_escrow_struct_fields_stable() {
 fn test_init_idempotent_guard() {
     let env = Env::default();
     let (admin, _, _, client) = setup(&env);
-    let token2 = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token2 = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     assert_eq!(
         client.try_init(&admin, &token2).unwrap_err().unwrap(),
         Error::AlreadyInitialized
@@ -186,7 +190,10 @@ fn test_lock_funds_duplicate_id_returns_bounty_exists() {
     let (_, depositor, _, client) = setup(&env);
     client.lock_funds(&depositor, &1, &500, &9999);
     assert_eq!(
-        client.try_lock_funds(&depositor, &1, &500, &9999).unwrap_err().unwrap(),
+        client
+            .try_lock_funds(&depositor, &1, &500, &9999)
+            .unwrap_err()
+            .unwrap(),
         Error::BountyExists
     );
 }
@@ -198,7 +205,10 @@ fn test_release_funds_missing_bounty() {
     let (_, _, _, client) = setup(&env);
     let contributor = Address::generate(&env);
     assert_eq!(
-        client.try_release_funds(&9999, &contributor).unwrap_err().unwrap(),
+        client
+            .try_release_funds(&9999, &contributor)
+            .unwrap_err()
+            .unwrap(),
         Error::BountyNotFound
     );
 }
@@ -212,7 +222,10 @@ fn test_release_funds_double_release_returns_funds_not_locked() {
     client.lock_funds(&depositor, &1, &1000, &9999);
     client.release_funds(&1, &contributor);
     assert_eq!(
-        client.try_release_funds(&1, &contributor).unwrap_err().unwrap(),
+        client
+            .try_release_funds(&1, &contributor)
+            .unwrap_err()
+            .unwrap(),
         Error::FundsNotLocked
     );
 }
@@ -327,7 +340,10 @@ fn test_lock_while_paused_returns_funds_paused() {
     let (_, depositor, _, client) = setup(&env);
     client.set_paused(&Some(true), &None, &None, &None);
     assert_eq!(
-        client.try_lock_funds(&depositor, &1, &1000, &9999).unwrap_err().unwrap(),
+        client
+            .try_lock_funds(&depositor, &1, &1000, &9999)
+            .unwrap_err()
+            .unwrap(),
         Error::FundsPaused
     );
 }
@@ -341,7 +357,10 @@ fn test_release_while_paused_returns_funds_paused() {
     client.lock_funds(&depositor, &1, &1000, &9999);
     client.set_paused(&None, &Some(true), &None, &None);
     assert_eq!(
-        client.try_release_funds(&1, &contributor).unwrap_err().unwrap(),
+        client
+            .try_release_funds(&1, &contributor)
+            .unwrap_err()
+            .unwrap(),
         Error::FundsPaused
     );
 }
@@ -355,7 +374,10 @@ fn test_deprecated_blocks_new_locks_existing_settles() {
     client.lock_funds(&depositor, &1, &1000, &9999);
     client.set_deprecated(&true, &None);
     assert_eq!(
-        client.try_lock_funds(&depositor, &2, &1000, &9999).unwrap_err().unwrap(),
+        client
+            .try_lock_funds(&depositor, &2, &1000, &9999)
+            .unwrap_err()
+            .unwrap(),
         Error::ContractDeprecated
     );
     client.release_funds(&1, &contributor);
@@ -426,11 +448,17 @@ fn test_amount_policy_boundary_errors() {
     let (admin, depositor, _, client) = setup(&env);
     client.set_amount_policy(&admin, &500, &2000);
     assert_eq!(
-        client.try_lock_funds(&depositor, &1, &499, &9999).unwrap_err().unwrap(),
+        client
+            .try_lock_funds(&depositor, &1, &499, &9999)
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidAmount
     );
     assert_eq!(
-        client.try_lock_funds(&depositor, &2, &2001, &9999).unwrap_err().unwrap(),
+        client
+            .try_lock_funds(&depositor, &2, &2001, &9999)
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidAmount
     );
     client.lock_funds(&depositor, &3, &500, &9999);
@@ -462,8 +490,18 @@ fn test_batch_lock_funds_stable() {
 
     let items = vec![
         &env,
-        LockFundsItem { bounty_id: 10, depositor: depositor.clone(), amount: 500, deadline: 9999 },
-        LockFundsItem { bounty_id: 11, depositor: depositor.clone(), amount: 500, deadline: 9999 },
+        LockFundsItem {
+            bounty_id: 10,
+            depositor: depositor.clone(),
+            amount: 500,
+            deadline: 9999,
+        },
+        LockFundsItem {
+            bounty_id: 11,
+            depositor: depositor.clone(),
+            amount: 500,
+            deadline: 9999,
+        },
     ];
     let count = client.batch_lock_funds(&items);
     assert_eq!(count, 2);
@@ -483,15 +521,31 @@ fn test_batch_release_funds_stable() {
 
     let lock_items = vec![
         &env,
-        LockFundsItem { bounty_id: 20, depositor: depositor.clone(), amount: 500, deadline: 9999 },
-        LockFundsItem { bounty_id: 21, depositor: depositor.clone(), amount: 500, deadline: 9999 },
+        LockFundsItem {
+            bounty_id: 20,
+            depositor: depositor.clone(),
+            amount: 500,
+            deadline: 9999,
+        },
+        LockFundsItem {
+            bounty_id: 21,
+            depositor: depositor.clone(),
+            amount: 500,
+            deadline: 9999,
+        },
     ];
     client.batch_lock_funds(&lock_items);
 
     let release_items = vec![
         &env,
-        ReleaseFundsItem { bounty_id: 20, contributor: contributor.clone() },
-        ReleaseFundsItem { bounty_id: 21, contributor: contributor.clone() },
+        ReleaseFundsItem {
+            bounty_id: 20,
+            contributor: contributor.clone(),
+        },
+        ReleaseFundsItem {
+            bounty_id: 21,
+            contributor: contributor.clone(),
+        },
     ];
     let count = client.batch_release_funds(&release_items);
     assert_eq!(count, 2);
@@ -599,7 +653,9 @@ fn test_participant_filter_blocklist_stable() {
 fn test_token_fee_config_round_trip_stable() {
     let env = Env::default();
     let (admin, _, _, client) = setup(&env);
-    let token_addr = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token_addr = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
 
     client.set_token_fee_config(&token_addr, &100, &50, &admin, &true);
 

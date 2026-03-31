@@ -296,8 +296,8 @@ All manifests follow the [Contract Manifest Schema](contracts/contract-manifest-
 
 ```bash
 # Validate manifests locally
-npm install -g ajv-cli
-./scripts/validate-manifests.sh
+npm install -g ajv-cli ajv-formats
+./contracts/scripts/validate-manifests.sh
 
 # View contract information
 jq '.contract_name, .version.current' contracts/bounty-escrow-manifest.json
@@ -342,10 +342,10 @@ You can also validate locally:
 
 ```bash
 # Using the provided script
-./scripts/validate-manifests.sh
+./contracts/scripts/validate-manifests.sh
 
 # Or manually with ajv
-ajv validate -s contracts/contract-manifest-schema.json -d contracts/bounty-escrow-manifest.json
+ajv validate --spec=draft2020 -c ajv-formats -s contracts/contract-manifest-schema.json -d contracts/bounty-escrow-manifest.json
 ```
 
 #### Contributing

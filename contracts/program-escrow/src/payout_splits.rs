@@ -294,7 +294,8 @@ pub fn execute_split_payout(
     for i in 0..n {
         let entry = config.beneficiaries.get(i).unwrap();
         let product = crate::token_math::safe_mul(total_amount, entry.share_bps);
-        let share_amount = product.checked_div(TOTAL_BASIS_POINTS)
+        let share_amount = product
+            .checked_div(TOTAL_BASIS_POINTS)
             .unwrap_or_else(|| panic!("SplitPayout: division error"));
         amounts.push_back(share_amount);
         distributed = crate::token_math::safe_add(distributed, share_amount);
@@ -328,7 +329,8 @@ pub fn execute_split_payout(
         });
     }
 
-    program.remaining_balance = crate::token_math::safe_sub(program.remaining_balance, total_amount);
+    program.remaining_balance =
+        crate::token_math::safe_sub(program.remaining_balance, total_amount);
     save_program(env, &program);
 
     env.events().publish(

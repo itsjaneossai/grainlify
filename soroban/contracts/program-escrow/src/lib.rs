@@ -26,6 +26,7 @@ const MAX_PAGE_SIZE: u32 = 20;
 const MAX_LABELS: u32 = 10;
 const MAX_LABEL_LENGTH: u32 = 32;
 const PROGRAM_REGISTERED: soroban_sdk::Symbol = symbol_short!("prg_reg");
+const PROGRAM_REGISTRY: soroban_sdk::Symbol = symbol_short!("prg_rgst");
 const PROGRAM_LABELS_UPDATED: soroban_sdk::Symbol = symbol_short!("prg_lbl");
 const LABEL_CONFIG_UPDATED: soroban_sdk::Symbol = symbol_short!("lbl_cfg");
 
@@ -187,6 +188,7 @@ pub enum OptionalJurisdiction {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Program {
     pub admin: Address,
+    pub payout_key: Address,
     pub name: String,
     pub total_funding: i128,
     pub status: ProgramStatus,
@@ -237,6 +239,16 @@ pub struct ProgramRegisteredEvent {
     pub max_funding: Option<i128>,
     pub registration_paused: bool,
     pub labels: Vec<String>,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgramRegistryEvent {
+    pub version: u32,
+    pub program_id: u64,
+    pub admin: Address,
+    pub payout_key: Address,
     pub timestamp: u64,
 }
 
@@ -607,6 +619,36 @@ impl ProgramEscrowContract {
         Ok(())
     }
 
+    /// Initialize a single program with a payout key.
+    pub fn init_program(
+        env: Env,
+        program_id: u64,
+        admin: Address,
+        payout_key: Address,
+    ) -> Result<(), Error> {
+        Self::ensure_initialized(&env)?;
+        Self::ensure_not_deprecated(&env)?;
+        Self::require_contract_admin(&env);
+
+        if env.storage().persistent().has(&DataKey::Program(program_id)) {
+            return Err(Error::ProgramExists);
+        }
+
+        // Emit registry event for discovery
+        env.events().publish(
+            (PROGRAM_REGISTRY, program_id),
+            ProgramRegistryEvent {
+                version: 1,
+                program_id,
+                admin: admin.clone(),
+                payout_key: payout_key.clone(),
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Ok(())
+    }
+
     /// Register a single program.
     pub fn register_program(
         env: Env,
@@ -727,6 +769,7 @@ impl ProgramEscrowContract {
 
         let program = Program {
             admin: admin.clone(),
+            payout_key: admin.clone(), // Default payout_key to admin for backward compatibility
             name,
             total_funding,
             status: ProgramStatus::Active,
@@ -846,6 +889,7 @@ impl ProgramEscrowContract {
 
             let program = Program {
                 admin: item.admin.clone(),
+                payout_key: item.admin.clone(),
                 name: item.name.clone(),
                 total_funding: item.total_funding,
                 status: ProgramStatus::Active,
@@ -1462,6 +1506,8 @@ impl ProgramEscrowContract {
     }
 }
 
+#[cfg(test)]
+mod test_utils;
 #[cfg(test)]
 mod test;
 #[cfg(test)]

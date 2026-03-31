@@ -36,7 +36,7 @@ fn test_audit_trail_disabled_by_default() {
     let deadline = env.ledger().timestamp() + 3600;
 
     client.lock_funds(&depositor, &1, &1000, &deadline);
-    
+
     let tail = client.get_audit_tail(&10);
     assert_eq!(tail.len(), 0, "Audit log should be empty when disabled");
 }
@@ -56,7 +56,7 @@ fn test_audit_trail_logs_actions_and_maintains_hash_chain() {
 
     // Fetch the tail
     let tail = client.get_audit_tail(&10);
-    
+
     assert_eq!(tail.len(), 2, "Should have 2 audit records");
 
     let record_0 = tail.get(0).unwrap();
@@ -64,8 +64,11 @@ fn test_audit_trail_logs_actions_and_maintains_hash_chain() {
 
     assert_eq!(record_0.sequence, 0);
     assert_eq!(record_1.sequence, 1);
-    
+
     // Integrity Check: Record 1's "previous_hash" MUST equal the computed hash of Record 0.
     // In our implementation, the head_hash gets updated, so Record 1 inherently contains the hash of Record 0's state.
-    assert_ne!(record_0.previous_hash, record_1.previous_hash, "Hash chain must progress");
+    assert_ne!(
+        record_0.previous_hash, record_1.previous_hash,
+        "Hash chain must progress"
+    );
 }

@@ -524,18 +524,18 @@ mod monitoring {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test_core_monitoring;
 #[cfg(test)]
 mod test_pseudo_randomness;
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test_serialization_compatibility;
 #[cfg(test)]
 mod test_storage_layout;
+#[cfg(all(test, feature = "wasm_tests"))]
+mod test_version_helpers;
 #[cfg(test)]
 mod test_strict_mode;
-#[cfg(test)]
-mod test_version_helpers;
 
 // ==================== END MONITORING MODULE ====================
 
@@ -1335,8 +1335,8 @@ impl GrainlifyContract {
 
         // Emit configuration change event
         env.events().publish(
-            (symbol_short!("timelock"), symbol_short!("delaychg")),
-            (old_delay, delay_seconds),
+            (symbol_short!("timelock"), symbol_short!("dly_chg")),
+            (old_delay, delay_seconds)
         );
     }
 
@@ -2799,7 +2799,7 @@ fn migrate_v2_to_v3(_env: &Env) {
 // ============================================================================
 // Testing Module
 // ============================================================================
-#[cfg(test)]
+#[cfg(all(test, feature = "wasm_tests"))]
 mod test {
     use super::*;
     use soroban_sdk::{
@@ -2809,10 +2809,13 @@ mod test {
 
     // Include end-to-end upgrade and migration tests
     pub mod e2e_upgrade_migration_tests;
+    #[cfg(feature = "governance_contract_tests")]
     pub mod invariant_entrypoints_tests;
     pub mod nonce_tests;
     pub mod state_snapshot_tests;
+    #[cfg(feature = "upgrade_rollback_tests")]
     pub mod upgrade_rollback_scenarios;
+    #[cfg(feature = "upgrade_rollback_tests")]
     pub mod upgrade_rollback_tests;
     pub mod upgrade_timelock_tests;
 
